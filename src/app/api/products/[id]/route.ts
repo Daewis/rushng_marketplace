@@ -1,0 +1,153 @@
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { requireUser } from "@/lib/auth";
+
+export async function GET(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  const { id } = await params;
+  const product = await db.product.findUnique({
+    where: { id },
+    include: {
+      vendor: {
+        select: {
+          id: true,
+          businessName: true,
+          slug: true,
+          description: true,
+          logo: true,
+          coverImage: true,
+          category: true,
+          phone: true,
+          whatsapp: true,
+          email: true,
+          location: true,
+          instagram: true,
+          tiktok: true,
+          facebook: true,
+          themeColor: true,
+          visibility: true,
+          deliveryEnabled: true,
+          deliveryFee: true,
+          deliveryTimeMin: true,
+          rating: true,
+          reviewCount: true,
+          followers: true,
+          verified: true,
+        },
+      },
+    },
+  });
+
+  if (!product) {
+    return NextResponse.json({ error: "Product not found" }, { status: 404 });
+  }
+
+  return NextResponse.json({
+    product: {
+      id: product.id,
+      vendorId: product.vendorId,
+      vendorName: product.vendor.businessName,
+      vendorSlug: product.vendor.slug,
+      name: product.name,
+      description: product.description,
+      price: product.price,
+      compareAtPrice: product.compareAtPrice ?? undefined,
+      images: JSON.parse(product.images),
+      category: product.category,
+      condition: product.condition ?? undefined,
+      stock: product.stock,
+      rating: product.rating,
+      reviewCount: product.reviewCount,
+      location: product.location,
+      createdAt: product.createdAt.toISOString(),
+      tags: JSON.parse(product.tags),
+    },
+    vendor: {
+      ...product.vendor,
+      theme: { coverColor: product.vendor.themeColor },
+    },
+  });
+}
+
+// PATCH /api/products/:id — vendor edits their own product.
+export async function PATCH(
+  req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const user = await requireUser();
+    const { id } = await params;
+
+    const existing = await db.product.findUnique({ where: { id }, include: { vendor: true } });
+    if (!existing) {
+      return NextResponse.json({ error: "Product not found" }, { status: 404 });
+    }
+    if (existing.vendor.userId !== user.id) {
+      return NextResponse.json({ error: "You can only edit your own products." }, { status: 403 });
+    }
+
+    const body = await req.json();
+    const { name, description, price, compareAtPrice, images, category, condition, stock, location, tags } = body;
+
+    if (price !== undefined) {
+      const parsedPrice = Number(price);
+      if (!Number.isFinite(parsedPrice) || parsedPrice < 0) {
+        return NextResponse.json({ error: "Price must be a valid non-negative number." }, { status: 400 });
+      }
+    }
+
+    const updated = await db.product.update({
+      where: { id },
+      data: {
+        ...(name !== undefined ? { name } : {}),
+        ...(description !== undefined ? { description } : {}),
+        ...(price !== undefined ? { price: Number(price) } : {}),
+        ...(compareAtPrice !== undefined
+          ? { compareAtPrice: compareAtPrice === "" || compareAtPrice === null ? null : Number(compareAtPrice) }
+          : {}),
+        ...(Array.isArray(images) ? { images: JSON.stringify(images.filter(Boolean)) } : {}),
+        ...(category !== undefined ? { category } : {}),
+        ...(condition !== undefined ? { condition: condition || null } : {}),
+        ...(stock !== undefined ? { stock: Math.max(0, parseInt(stock, 10) || 0) } : {}),
+        ...(location !== undefined ? { location } : {}),
+        ...(Array.isArray(tags) ? { tags: JSON.stringify(tags) } : {}),
+      },
+    });
+
+    return NextResponse.json({
+      product: { ...updated, images: JSON.parse(updated.images), tags: JSON.parse(updated.tags) },
+    });
+  } catch (err: any) {
+    if (err instanceof Response) throw err;
+    console.error("[product PATCH] error", err);
+    return NextResponse.json({ error: err.message || "Failed to update product" }, { status: 500 });
+  }
+}
+
+// DELETE /api/products/:id — vendor removes their own product.
+export async function DELETE(
+  _req: NextRequest,
+  { params }: { params: Promise<{ id: string }> },
+) {
+  try {
+    const user = await requireUser();
+    const { id } = await params;
+
+    const existing = await db.product.findUnique({ where: { id }, include: { vendor: true } });
+    if (!existing) {
+      return NextResponse.json({ error: "Product not found" }, { status: 404 });
+    }
+    if (existing.vendor.userId !== user.id) {
+      return NextResponse.json({ error: "You can only delete your own products." }, { status: 403 });
+    }
+
+    await db.product.delete({ where: { id } });
+    return NextResponse.json({ success: true });
+  } catch (err: any) {
+    if (err instanceof Response) throw err;
+    console.error("[product DELETE] error", err);
+    return NextResponse.json({ error: err.message || "Failed to delete product" }, { status: 500 });
+  }
+}

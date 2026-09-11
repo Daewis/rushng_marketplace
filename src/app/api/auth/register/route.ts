@@ -1,0 +1,62 @@
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { hashPassword, createToken, setSessionCookie, addCapability, serializeCapabilities } from "@/lib/auth";
+
+export async function POST(req: NextRequest) {
+  try {
+    const body = await req.json();
+    const { name, email, phone, password, location } = body;
+
+    if (!name || !email || !password) {
+      return NextResponse.json(
+        { error: "Name, email, and password are required" },
+        { status: 400 },
+      );
+    }
+
+    const existing = await db.user.findUnique({ where: { email } });
+    if (existing) {
+      return NextResponse.json(
+        { error: "An account with this email already exists" },
+        { status: 409 },
+      );
+    }
+
+    const passwordHash = await hashPassword(password);
+    const user = await db.user.create({
+      data: {
+        name,
+        email,
+        phone: phone || null,
+        location: location || null,
+        passwordHash,
+        avatar: body.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=FF6B1A&color=fff`,
+        capabilities: serializeCapabilities(addCapability({ capabilities: null }, "CUSTOMER", "ACTIVE")),
+        activeWorkspace: "CUSTOMER",
+        wallet: { create: { balance: 0 } },
+      },
+      include: { wallet: true },
+    });
+
+    const token = await createToken(user.id);
+    await setSessionCookie(token);
+
+    return NextResponse.json({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      phone: user.phone,
+      avatar: user.avatar,
+      location: user.location,
+      capabilities: JSON.parse(user.capabilities),
+      activeWorkspace: user.activeWorkspace,
+      wallet: user.wallet,
+    });
+  } catch (err) {
+    console.error("[register] error", err);
+    return NextResponse.json(
+      { error: "Failed to register. Please try again." },
+      { status: 500 },
+    );
+  }
+}

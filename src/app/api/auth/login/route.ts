@@ -1,0 +1,79 @@
+import { NextRequest, NextResponse } from "next/server";
+import { db } from "@/lib/db";
+import { verifyPassword, createToken, setSessionCookie } from "@/lib/auth";
+
+export async function POST(req: NextRequest) {
+  try {
+    const { email, password } = await req.json();
+
+    if (!email || !password) {
+      return NextResponse.json(
+        { error: "Email and password are required" },
+        { status: 400 },
+      );
+    }
+
+    const user = await db.user.findUnique({
+      where: { email },
+      include: {
+        vendorProfile: true,
+        providerProfile: true,
+        riderProfile: { include: { vehicle: true } },
+        wallet: true,
+      },
+    });
+
+    if (!user) {
+      return NextResponse.json(
+        { error: "No account found with this email. Please register." },
+        { status: 404 },
+      );
+    }
+
+    // Accounts created via Firebase (Google Sign-In) have passwordHash = null.
+    // Refuse the legacy email/password flow for them — they must sign in
+    // with Google again. This avoids silently creating a parallel
+    // password-based session that bypasses Firebase's revocation.
+    if (!user.passwordHash) {
+      return NextResponse.json(
+        {
+          error:
+            "This account was created with Google. Please use the “Continue with Google” button to sign in.",
+        },
+        { status: 401 },
+      );
+    }
+
+    const ok = await verifyPassword(password, user.passwordHash);
+    if (!ok) {
+      return NextResponse.json(
+        { error: "Incorrect password. Please try again." },
+        { status: 401 },
+      );
+    }
+
+    const token = await createToken(user.id);
+    await setSessionCookie(token);
+
+    return NextResponse.json({
+      id: user.id,
+      email: user.email,
+      name: user.name,
+      phone: user.phone,
+      avatar: user.avatar,
+      location: user.location,
+      capabilities: JSON.parse(user.capabilities),
+      activeWorkspace: user.activeWorkspace,
+      vendorProfile: user.vendorProfile,
+      providerProfile: user.providerProfile,
+      riderProfile: user.riderProfile,
+      wallet: user.wallet,
+    });
+  } catch (err) {
+    console.error("[login] error", err);
+    return NextResponse.json(
+      { error: "Failed to log in. Please try again." },
+      { status: 500 },
+    );
+  }
+}

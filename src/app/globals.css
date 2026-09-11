@@ -1,0 +1,238 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:is(.dark *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --color-rush: var(--rush);
+  --color-rush-foreground: var(--rush-foreground);
+  --color-rush-soft: var(--rush-soft);
+  --color-rush-deep: var(--rush-deep);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-2xl: calc(var(--radius) + 8px);
+}
+
+:root {
+  --radius: 0.875rem;
+  --background: oklch(0.99 0.005 60);
+  --foreground: oklch(0.18 0.02 30);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.18 0.02 30);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.18 0.02 30);
+  --primary: oklch(0.205 0 0);
+  --primary-foreground: oklch(0.985 0 0);
+  --secondary: oklch(0.97 0.005 60);
+  --secondary-foreground: oklch(0.205 0 0);
+  --muted: oklch(0.97 0.005 60);
+  --muted-foreground: oklch(0.55 0.01 30);
+  --accent: oklch(0.97 0.005 60);
+  --accent-foreground: oklch(0.205 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --border: oklch(0.92 0.005 60);
+  --input: oklch(0.92 0.005 60);
+  --ring: oklch(0.7 0.18 40);
+
+  /* Rush brand system */
+  --rush: oklch(0.68 0.19 38);            /* vivid orange — Rush primary */
+  --rush-foreground: oklch(0.99 0.005 60);
+  --rush-soft: oklch(0.96 0.04 50);       /* warm peach tint for surfaces */
+  --rush-deep: oklch(0.55 0.22 35);       /* deeper burnt orange for accents */
+
+  --ink: oklch(0.18 0.02 30);             /* near-black warm ink */
+  --ink-soft: oklch(0.42 0.02 30);        /* secondary text */
+  --surface: oklch(0.99 0.005 60);
+  --surface-2: oklch(0.965 0.006 60);
+
+  --success: oklch(0.62 0.16 145);
+  --warning: oklch(0.78 0.15 75);
+
+  --chart-1: oklch(0.68 0.19 38);
+  --chart-2: oklch(0.62 0.16 145);
+  --chart-3: oklch(0.6 0.12 240);
+  --chart-4: oklch(0.78 0.15 75);
+  --chart-5: oklch(0.55 0.22 35);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.145 0 0);
+  --sidebar-primary: oklch(0.205 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.205 0 0);
+  --sidebar-border: oklch(0.922 0 0);
+  --sidebar-ring: oklch(0.708 0 0);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "ss01", "cv01";
+  }
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+}
+
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .snap-x-mandatory {
+    scroll-snap-type: x mandatory;
+  }
+  .snap-start {
+    scroll-snap-align: start;
+  }
+  .safe-bottom {
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+  }
+  .rush-gradient {
+    background-image: linear-gradient(135deg, var(--rush) 0%, var(--rush-deep) 100%);
+  }
+  .rush-gradient-soft {
+    background-image: linear-gradient(135deg, var(--rush-soft) 0%, oklch(0.99 0.005 60) 100%);
+  }
+  .shadow-rush {
+    box-shadow: 0 8px 24px -8px oklch(0.68 0.19 38 / 0.35);
+  }
+  .shadow-card {
+    box-shadow: 0 2px 8px -2px oklch(0.18 0.02 30 / 0.06), 0 1px 3px -1px oklch(0.18 0.02 30 / 0.04);
+  }
+}
+
+/* ─── Ambient animated background ───────────────────────────────────────
+ * A subtle gradient "aurora" that sits behind the entire app.
+ * Three radial gradient blobs slowly drift across the viewport so the
+ * UI never feels static. Kept very soft (low opacity) so it doesn't
+ * fight with foreground content.
+ *
+ * The animation runs on transform: translate3d — GPU-cheap.
+ * Respects prefers-reduced-motion: users who opted out see a static
+ * gradient instead.
+ */
+.rush-ambient-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+  background:
+    radial-gradient(60% 80% at 0% 0%, oklch(0.96 0.04 50 / 0.7) 0%, transparent 60%),
+    radial-gradient(50% 70% at 100% 0%, oklch(0.97 0.06 25 / 0.5) 0%, transparent 60%),
+    radial-gradient(70% 80% at 50% 100%, oklch(0.965 0.05 80 / 0.5) 0%, transparent 60%),
+    var(--background);
+}
+.rush-ambient-bg::before,
+.rush-ambient-bg::after {
+  content: "";
+  position: absolute;
+  border-radius: 9999px;
+  filter: blur(64px);
+  opacity: 0.55;
+  will-change: transform;
+}
+.rush-ambient-bg::before {
+  width: 40vw;
+  height: 40vw;
+  min-width: 360px;
+  min-height: 360px;
+  background: radial-gradient(circle, oklch(0.68 0.19 38 / 0.5) 0%, transparent 70%);
+  top: -10%;
+  left: -5%;
+  animation: rush-float-a 18s ease-in-out infinite alternate;
+}
+.rush-ambient-bg::after {
+  width: 50vw;
+  height: 50vw;
+  min-width: 420px;
+  min-height: 420px;
+  background: radial-gradient(circle, oklch(0.78 0.13 75 / 0.4) 0%, transparent 70%);
+  bottom: -15%;
+  right: -10%;
+  animation: rush-float-b 22s ease-in-out infinite alternate;
+}
+.rush-ambient-bg .rush-ambient-blob-3 {
+  position: absolute;
+  width: 35vw;
+  height: 35vw;
+  min-width: 320px;
+  min-height: 320px;
+  border-radius: 9999px;
+  filter: blur(72px);
+  opacity: 0.35;
+  background: radial-gradient(circle, oklch(0.62 0.16 145 / 0.4) 0%, transparent 70%);
+  top: 35%;
+  left: 40%;
+  animation: rush-float-c 26s ease-in-out infinite alternate;
+  will-change: transform;
+}
+@keyframes rush-float-a {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  50%  { transform: translate3d(8vw, 6vh, 0) scale(1.1); }
+  100% { transform: translate3d(4vw, 14vh, 0) scale(0.95); }
+}
+@keyframes rush-float-b {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  50%  { transform: translate3d(-6vw, -8vh, 0) scale(1.08); }
+  100% { transform: translate3d(-10vw, -4vh, 0) scale(1.04); }
+}
+@keyframes rush-float-c {
+  0%   { transform: translate3d(0, 0, 0) scale(1); }
+  50%  { transform: translate3d(-12vw, 8vh, 0) scale(1.12); }
+  100% { transform: translate3d(6vw, -6vh, 0) scale(0.92); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .rush-ambient-bg::before,
+  .rush-ambient-bg::after,
+  .rush-ambient-bg .rush-ambient-blob-3 {
+    animation: none;
+  }
+}
