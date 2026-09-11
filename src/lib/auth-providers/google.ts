@@ -28,8 +28,7 @@
  */
 
 import {
-  signInWithRedirect,
-  getRedirectResult,
+  signInWithPopup,
   type UserCredential,
 } from "firebase/auth";
 import {
@@ -63,7 +62,7 @@ export async function signInWithGoogle(
   } catch {
     // sessionStorage might be unavailable (private mode). Ignore.
   }
-  await signInWithRedirect(firebaseAuth, firebaseGoogleProvider);
+  await signInWithPopup(firebaseAuth, firebaseGoogleProvider);
 }
 
 /**
@@ -77,34 +76,34 @@ export async function signInWithGoogle(
  * Returns null when there's no redirect result to consume (e.g. the
  * user landed on the page directly, not via a Google redirect).
  */
-export async function consumeRedirectResult(): Promise<AuthResult | null> {
-  if (!isFirebaseConfigured || !firebaseAuth) {
-    return null;
-  }
-  const cred: UserCredential | null = await getRedirectResult(firebaseAuth);
-  if (!cred || !cred.user) {
-    return null;
-  }
-  const idToken = await cred.user.getIdToken();
-  const res = await fetch("/api/auth/firebase", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ idToken }),
-  });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({ error: "Login failed" }));
-    throw new AuthError(
-      err.error || `Login failed (${res.status})`,
-      String(res.status),
-    );
-  }
-  const data = await res.json();
-  return {
-    id: data.user.id,
-    email: data.user.email,
-    name: data.user.name,
-  };
-}
+// export async function consumeRedirectResult(): Promise<AuthResult | null> {
+//   if (!isFirebaseConfigured || !firebaseAuth) {
+//     return null;
+//   }
+//   const cred: UserCredential | null = await getRedirectResult(firebaseAuth);
+//   if (!cred || !cred.user) {
+//     return null;
+//   }
+//   const idToken = await cred.user.getIdToken();
+//   const res = await fetch("/api/auth/firebase", {
+//     method: "POST",
+//     headers: { "Content-Type": "application/json" },
+//     body: JSON.stringify({ idToken }),
+//   });
+//   if (!res.ok) {
+//     const err = await res.json().catch(() => ({ error: "Login failed" }));
+//     throw new AuthError(
+//       err.error || `Login failed (${res.status})`,
+//       String(res.status),
+//     );
+//   }
+//   const data = await res.json();
+//   return {
+//     id: data.user.id,
+//     email: data.user.email,
+//     name: data.user.name,
+//   };
+// }
 
 /**
  * Sign out the Firebase user (clears the redirect-based session). The
