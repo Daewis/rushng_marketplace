@@ -8,4 +8,10 @@
     "MONGODB_DB": "rush"
   },
   "crons": []
+  "rewrites": [
+    {
+      "source": "/__/auth/:path*",
+      "destination": "https://firebaseapp.com*"
+    }
+  ]
 }
