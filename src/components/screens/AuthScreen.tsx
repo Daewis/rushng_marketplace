@@ -5,7 +5,8 @@ import { useLogin, useRegister, useMe } from "@/lib/hooks";
 import { useRush } from "@/lib/store";
 import { ChevronLeft, Loader2, Mail, Lock, User as UserIcon, Phone, MapPin } from "lucide-react";
 import { isFirebaseConfigured } from "@/lib/auth-providers/firebase-client";
-import { consumeRedirectResult, signInWithGoogle } from "@/lib/auth-providers/google";
+// import { consumeRedirectResult, signInWithGoogle } from "@/lib/auth-providers/google";
+import { signInWithGoogle } from "@/lib/auth-providers/google";
 import { toAppError } from "@/lib/errors";
 
 type Mode = "login" | "register";
@@ -19,7 +20,7 @@ export function AuthScreen() {
   const [location, setLocation] = useState("");
   const [error, setError] = useState("");
   const [googleLoading, setGoogleLoading] = useState(false);
-  const [redirectProcessing, setRedirectProcessing] = useState(false);
+  // const [redirectProcessing, setRedirectProcessing] = useState(false);
 
   const loginMut = useLogin();
   const registerMut = useRegister();
@@ -37,40 +38,40 @@ export function AuthScreen() {
    * This is the "redirect" half of the redirect-based OAuth flow —
    * no popup is opened at any point.
    */
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!isFirebaseConfigured) return;
-      setRedirectProcessing(true);
-      try {
-        const result = await consumeRedirectResult();
-        if (cancelled) return;
-        if (!result) {
-          // No redirect in flight — this is a normal page load. Do nothing.
-          return;
-        }
-        await qc.refetch();
-        pushToast({ title: "Welcome to Rush!" });
-        // Honor the post-login path the caller stashed before the
-        // redirect (defaults to "/").
-        const postLoginPath =
-          (() => {
-            try { return sessionStorage.getItem("rush.postLoginPath") || "/"; }
-            catch { return "/"; }
-          })();
-        try { sessionStorage.removeItem("rush.postLoginPath"); } catch {}
-        window.location.href = postLoginPath;
-      } catch (err: any) {
-        if (!cancelled) setError(toAppError(err).message);
-      } finally {
-        if (!cancelled) setRedirectProcessing(false);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+  // useEffect(() => {
+  //   let cancelled = false;
+  //   (async () => {
+  //     if (!isFirebaseConfigured) return;
+  //     setRedirectProcessing(true);
+  //     try {
+  //       const result = await consumeRedirectResult();
+  //       if (cancelled) return;
+  //       if (!result) {
+  //         // No redirect in flight — this is a normal page load. Do nothing.
+  //         return;
+  //       }
+  //       await qc.refetch();
+  //       pushToast({ title: "Welcome to Rush!" });
+  //       // Honor the post-login path the caller stashed before the
+  //       // redirect (defaults to "/").
+  //       const postLoginPath =
+  //         (() => {
+  //           try { return sessionStorage.getItem("rush.postLoginPath") || "/"; }
+  //           catch { return "/"; }
+  //         })();
+  //       try { sessionStorage.removeItem("rush.postLoginPath"); } catch {}
+  //       window.location.href = postLoginPath;
+  //     } catch (err: any) {
+  //       if (!cancelled) setError(toAppError(err).message);
+  //     } finally {
+  //       if (!cancelled) setRedirectProcessing(false);
+  //     }
+  //   })();
+  //   return () => {
+  //     cancelled = true;
+  //   };
      
-  }, []);
+  // }, []);
 
   // Back arrow — prefers history back when available (preserves the
   // page the user came from). The `back()` helper falls back to home
@@ -104,17 +105,12 @@ export function AuthScreen() {
     setError("");
     setGoogleLoading(true);
     try {
-      // This triggers a full-page redirect to Google. The browser
-      // will come back to this exact page, and the useEffect above
-      // will pick up the redirect result and complete the sign-in.
-      await signInWithGoogle(window.location.pathname + window.location.search);
+      await signInWithGoogle();
     } catch (err: any) {
       setError(toAppError(err).message);
+    } finally {
       setGoogleLoading(false);
     }
-    // Note: we do NOT clear googleLoading here. The redirect takes the
-    // user away from this page; when they come back, the useEffect's
-    // redirectProcessing flag takes over the loading UX.
   };
 
   return (
