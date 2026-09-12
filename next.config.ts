@@ -14,6 +14,7 @@ const withPWA = withPWAInit({
 });
 
 const nextConfig: NextConfig = {
+  transpilePackages: ['jwks-rsa', 'jose'],
   output: "standalone",
   typescript: {
     ignoreBuildErrors: true,
