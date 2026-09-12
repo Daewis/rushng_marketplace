@@ -1,6 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { hashPassword, createToken, setSessionCookie, addCapability, serializeCapabilities } from "@/lib/auth";
+import { sendWelcomeEmail } from "@/lib/email";
+import {
+  hashPassword,
+  createToken,
+  setSessionCookie,
+  addCapability,
+  serializeCapabilities,
+} from "@/lib/auth";
 
 export async function POST(req: NextRequest) {
   try {
@@ -14,7 +21,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const existing = await db.user.findUnique({ where: { email } });
+    const existing = await db.user.findUnique({
+      where: { email },
+    });
+
     if (existing) {
       return NextResponse.json(
         { error: "An account with this email already exists" },
@@ -23,6 +33,7 @@ export async function POST(req: NextRequest) {
     }
 
     const passwordHash = await hashPassword(password);
+
     const user = await db.user.create({
       data: {
         name,
@@ -30,13 +41,52 @@ export async function POST(req: NextRequest) {
         phone: phone || null,
         location: location || null,
         passwordHash,
-        avatar: body.avatar || `https://ui-avatars.com/api/?name=${encodeURIComponent(name)}&background=FF6B1A&color=fff`,
-        capabilities: serializeCapabilities(addCapability({ capabilities: null }, "CUSTOMER", "ACTIVE")),
+        avatar:
+          body.avatar ||
+          `https://ui-avatars.com/api/?name=${encodeURIComponent(
+            name,
+          )}&background=FF6B1A&color=fff`,
+        capabilities: serializeCapabilities(
+          addCapability(
+            { capabilities: null },
+            "CUSTOMER",
+            "ACTIVE",
+          ),
+        ),
         activeWorkspace: "CUSTOMER",
-        wallet: { create: { balance: 0 } },
+        wallet: {
+          create: {
+            balance: 0,
+          },
+        },
       },
-      include: { wallet: true },
+      include: {
+        wallet: true,
+      },
     });
+
+    /*
+     * Send the welcome email exactly once.
+     *
+     * sendWelcomeEmail() uses the user's ID as the
+     * idempotency key, so calling this again for the
+     * same account will not create another welcome email.
+     *
+     * If email delivery fails, account creation should
+     * still succeed.
+     */
+    try {
+      await sendWelcomeEmail({
+        userId: user.id,
+        email: user.email,
+        name: user.name,
+      });
+    } catch (emailError) {
+      console.error(
+        "[register] welcome email failed:",
+        emailError,
+      );
+    }
 
     const token = await createToken(user.id);
     await setSessionCookie(token);
@@ -54,9 +104,14 @@ export async function POST(req: NextRequest) {
     });
   } catch (err) {
     console.error("[register] error", err);
+
     return NextResponse.json(
-      { error: "Failed to register. Please try again." },
-      { status: 500 },
+      {
+        error: "Failed to register. Please try again.",
+      },
+      {
+        status: 500,
+      },
     );
   }
 }
