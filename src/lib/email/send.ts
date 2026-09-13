@@ -60,14 +60,40 @@ export async function sendEmail(
   options: SendEmailOptions,
 ): Promise<EmailSendResult> {
   if (!emailConfig.apiKey) {
+    // Loud-but-non-fatal: log clearly so a developer running the app
+    // sees exactly why no emails are arriving, but don't throw —
+    // registration and other flows should still succeed.
     console.warn(
-      "[email] RESEND_API_KEY is not configured. Email skipped.",
+      "[email] RESEND_API_KEY is not configured. Email to",
+      options.to.email,
+      "subject:",
+      JSON.stringify(options.subject),
+      "— skipped. Set RESEND_API_KEY + RUSH_EMAIL_FROM to enable.",
     );
 
     return {
       success: false,
       skipped: true,
       error: "Email service is not configured.",
+    };
+  }
+
+  // Catch the placeholder `RUSH_EMAIL_FROM` default before Resend
+  // rejects it with a confusing 422. Resend only lets you send from
+  // a verified domain — the placeholder is not one.
+  if (
+    !process.env.RUSH_EMAIL_FROM ||
+    /yourdomain\.com$/.test(process.env.RUSH_EMAIL_FROM)
+  ) {
+    console.error(
+      "[email] RUSH_EMAIL_FROM is either unset or still the placeholder " +
+        "'Rush <notifications@yourdomain.com>'. Resend will reject this — " +
+        "set RUSH_EMAIL_FROM to an address on a Resend-verified domain.",
+    );
+    return {
+      success: false,
+      error:
+        "RUSH_EMAIL_FROM must be set to an address on a Resend-verified domain.",
     };
   }
 
@@ -271,6 +297,15 @@ export async function sendEmail(
           error: "",
         },
       },
+    );
+
+    console.log(
+      "[email] sent:",
+      options.to.email,
+      "subject:",
+      JSON.stringify(options.subject),
+      "providerId:",
+      providerId,
     );
 
     return {

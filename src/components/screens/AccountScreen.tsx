@@ -1,17 +1,20 @@
 "use client";
 
+import { useState, useRef } from "react";
 import {
   ChevronRight, ShoppingBag, Wrench, Car, Heart, MapPin,
   CreditCard, Bell, Shield, HelpCircle, LogOut, Store, Wallet,
+  Camera, Loader2,
 } from "lucide-react";
 import { useRush } from "@/lib/store";
-import { useLogout } from "@/lib/hooks";
+import { useLogout, useUpdateProfile, useUploadFile } from "@/lib/hooks";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { naira } from "@/lib/data";
 
 export function AccountScreen() {
-  const { user, navigate, pushToast } = useRush();
+  const { user, navigate, pushToast, setAuthenticatedUser } = useRush();
   const logoutMut = useLogout();
+  const [editOpen, setEditOpen] = useState(false);
 
   // If not logged in, show login prompt
   if (!user) {
@@ -73,7 +76,7 @@ export function AccountScreen() {
               </p>
             </div>
             <button
-              onClick={() => pushToast({ title: "Edit profile" })}
+              onClick={() => setEditOpen(true)}
               className="px-2.5 py-1.5 rounded-lg bg-white/20 text-xs font-semibold backdrop-blur-sm"
             >
               Edit
@@ -209,6 +212,9 @@ export function AccountScreen() {
       <div className="px-4 pt-4 text-center">
         <p className="text-[10px] text-ink-soft">Rush v2.0 · One account, many possibilities</p>
       </div>
+
+      {/* Profile edit overlay */}
+      <ProfileEditSheet open={editOpen} onClose={() => setEditOpen(false)} />
     </div>
   );
 }
@@ -253,5 +259,136 @@ function Row({
       )}
       <ChevronRight className="h-4 w-4 text-ink-soft shrink-0" />
     </button>
+  );
+}
+
+
+/**
+ * ProfileEditSheet — full-screen overlay for editing the current user's
+ * profile: avatar (upload), name, phone, location.
+ *
+ * Opens from the AccountScreen "Edit" button.
+ */
+function ProfileEditSheet({ open, onClose }: { open: boolean; onClose: () => void }) {
+  const { user, pushToast, setAuthenticatedUser } = useRush();
+  const updateProfile = useUpdateProfile();
+  const uploadMut = useUploadFile();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [name, setName] = useState(user?.name || "");
+  const [phone, setPhone] = useState(user?.phone || "");
+  const [location, setLocation] = useState(user?.location || "");
+  const [avatar, setAvatar] = useState(user?.avatar || "");
+  const [uploadingAvatar, setUploadingAvatar] = useState(false);
+
+  if (!open || !user) return null;
+
+  const handleAvatarPick = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setUploadingAvatar(true);
+    try {
+      const res = await uploadMut.mutateAsync(file);
+      setAvatar(res.url);
+    } catch (err: any) {
+      pushToast({ title: "Avatar upload failed", description: err.message });
+    } finally {
+      setUploadingAvatar(false);
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      const updated = await updateProfile.mutateAsync({ name, phone, avatar, location });
+      // Optimistically update the local store so the avatar
+      // immediately reflects in the TopBar.
+      setAuthenticatedUser({ ...user, name: updated.name, phone: updated.phone, avatar: updated.avatar, location: updated.location });
+      pushToast({ title: "Profile updated" });
+      onClose();
+    } catch (err: any) {
+      pushToast({ title: "Update failed", description: err.message });
+    }
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 bg-background flex flex-col">
+      <header className="flex items-center justify-between px-4 py-3 border-b border-border bg-background sticky top-0">
+        <button onClick={onClose} className="text-ink-soft hover:text-ink text-sm font-medium">
+          Cancel
+        </button>
+        <p className="font-bold text-ink">Edit profile</p>
+        <button
+          onClick={handleSave}
+          disabled={updateProfile.isPending}
+          className="text-rush hover:text-rush-deep text-sm font-bold disabled:opacity-50"
+        >
+          {updateProfile.isPending ? "Saving…" : "Save"}
+        </button>
+      </header>
+
+      <div className="flex-1 overflow-y-auto px-4 pt-6 pb-6">
+        {/* Avatar */}
+        <div className="flex flex-col items-center mb-6">
+          <div className="relative">
+            <Avatar className="h-24 w-24 ring-4 ring-rush/20">
+              {avatar && <AvatarImage src={avatar} alt={name} />}
+              <AvatarFallback className="text-3xl">{name?.[0] || "?"}</AvatarFallback>
+            </Avatar>
+            <button
+              onClick={() => fileRef.current?.click()}
+              disabled={uploadingAvatar}
+              className="absolute bottom-0 right-0 h-8 w-8 rounded-full rush-gradient text-white flex items-center justify-center shadow-rush disabled:opacity-50"
+              aria-label="Upload avatar"
+            >
+              {uploadingAvatar ? <Loader2 className="h-4 w-4 animate-spin" /> : <Camera className="h-4 w-4" />}
+            </button>
+            <input
+              ref={fileRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleAvatarPick}
+            />
+          </div>
+          <p className="text-xs text-ink-soft mt-2">Tap to upload a new avatar</p>
+        </div>
+
+        {/* Form fields */}
+        <div className="space-y-4">
+          <Field label="Name">
+            <input
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className="w-full bg-muted rounded-xl px-3.5 py-2.5 text-sm text-ink focus:outline-none"
+              placeholder="Your name"
+            />
+          </Field>
+          <Field label="Phone">
+            <input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              className="w-full bg-muted rounded-xl px-3.5 py-2.5 text-sm text-ink focus:outline-none"
+              placeholder="+234 …"
+            />
+          </Field>
+          <Field label="Location">
+            <input
+              value={location}
+              onChange={(e) => setLocation(e.target.value)}
+              className="w-full bg-muted rounded-xl px-3.5 py-2.5 text-sm text-ink focus:outline-none"
+              placeholder="e.g. Yaba, Lagos"
+            />
+          </Field>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div>
+      <label className="block text-xs font-semibold text-ink-soft mb-1.5">{label}</label>
+      {children}
+    </div>
   );
 }

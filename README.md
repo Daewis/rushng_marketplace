@@ -10,13 +10,14 @@ A real, working full-stack Next.js 16 app for shopping from local vendors, hirin
 # 1. Install dependencies
 bun install
 
-# 2. Set up the database (starts EMPTY — no sample data)
-bun run db:push
+# 2. Configure environment variables (see DEPLOYMENT.md for the full list)
+#    At minimum you need:
+#      MONGODB_URI   — MongoDB Atlas connection string
+#      JWT_SECRET    — 32+ char random string (`openssl rand -hex 32`)
+cp -n .env.example .env.local   # if .env.example exists, otherwise create one
 
-# 3. (Optional) Create the first admin account
-bun run db:admin
-#    Prompts for email / name / password. Creates ONE admin user with
-#    NO sample marketplace data. Sign in at /account → Admin Panel.
+# 3. (Optional) Verify MongoDB connectivity + pre-create indexes
+bun run db:init-mongo
 
 # 4. Run the dev server
 bun run dev
@@ -24,40 +25,19 @@ bun run dev
 
 Open `http://localhost:3000`.
 
-> **Real data only — no mock fallback, no fixture data by default.**
->
-> A fresh install shows honest empty states on the homepage
-> ("Nothing here yet — Be the first to add products and stores to
-> Rush."). If the API is unreachable, screens show a friendly "We
-> couldn't load this — try again" error with a retry button. There
-> is no automatic fallback to fake products, vendors, or orders.
->
-> **Optional fixture seeding** for demos / automated tests:
->
-> ```bash
-> bun run db:seed   # adds 5 sample vendors, 14 products, 4 providers,
->                   # 2 orders, 1 ride, plus demo accounts
->                   # (jesu@rush.app / password123, admin@rush.app / admin123)
-> ```
->
-> This is for screenshots, demos, and tests only. The fixture data
-> lives in `tests/fixtures/seed-data.ts` and is structurally isolated
-> from the application code. To wipe:
->
-> ```bash
-> rm db/custom.db && bun run db:push   # clean slate
-> ```
+> **Required env vars.** `MONGODB_URI` and `JWT_SECRET` are required — the server refuses to boot without them. There is no hardcoded fallback; missing secrets throw a clear error at first request rather than silently degrading security. See `DEPLOYMENT.md` for the full environment table.
 
 ## Tech stack
 
 - **Framework**: Next.js 16 (App Router) + TypeScript 5
 - **Styling**: Tailwind CSS 4 + shadcn/ui (New York) + Lucide icons
-- **Database**: Prisma ORM with SQLite (default) — switch to MongoDB Atlas via `scripts/switch-to-mongodb.ts`
-- **Auth**: Firebase (Google Sign-In) as primary, bcryptjs + jose (JWT) + HTTP-only cookies as fallback when Firebase isn't configured
-- **Payments**: Paystack (NGN cards / bank transfer / USSD) with mock-payment mode for development when keys aren't set
+- **Database**: MongoDB Atlas via the `mongodb` Node driver. The data layer in `src/lib/db.ts` exposes a Prisma-shaped API (`findUnique`, `findMany`, `create`, `update`, `upsert`, `updateMany`, `createMany`, `count`, `_count` include, `$transaction` compatibility shim) so call sites read like Prisma Client code without a Prisma dependency. Indexes are created automatically on first request via `ensureIndexes()`.
+- **Auth**: Firebase (Google Sign-In) as primary, bcryptjs (cost factor 12) + jose (JWT, HS256) + HTTP-only cookies as fallback when Firebase isn't configured. Sessions are 30 days, `HttpOnly`, `Secure` in production, `SameSite=lax`.
+- **Payments**: Paystack (NGN cards / bank transfer / USSD). A mock-payment mode auto-succeeds every verify call **in development only**; in production, a missing `PAYSTACK_SECRET_KEY` throws — the server refuses to silently mark orders as paid.
+- **Email**: Resend with MongoDB-backed idempotency keys, retry, and a delivery log.
 - **Server state**: TanStack Query v5
 - **Client state**: Zustand
-- **PWA**: installable, offline-capable via @ducanh2912/next-pwa
+- **PWA**: installable, offline-capable via `@ducanh2912/next-pwa`
 - **Package manager**: Bun (recommended) — also works with npm/pnpm
 
 ## What's inside
@@ -78,24 +58,25 @@ The UI keeps the multi-capability system **invisible** until the user taps **Sel
 ### Project structure
 
 ```
-prisma/
-  schema.prisma              # Full database schema
 src/
   app/
     api/                     # All REST API routes
-      auth/{login,logout,me,register}/route.ts
+      auth/{login,logout,me,register,firebase}/route.ts
       products/[id]/route.ts
       stores/[slug]/route.ts
       orders/[id]/route.ts
       providers/[slug]/route.ts
       onboarding/{vendor,provider,rider}/route.ts
       rides/[id]/route.ts
+      rider-jobs/[id]/route.ts
+      payments/{initiate,verify,webhook}/route.ts
+      admin/{users,vendors,providers,riders,products,orders,rides,service-jobs,stats,system}/route.ts
     globals.css              # Rush brand design system (orange, ink, warm surface)
     layout.tsx
     page.tsx                 # Client-side view router
   components/
-    layout/                  # TopBar, BottomNav
-    screens/                 # 18 screens (Home, Shop, Product, Cart, Checkout, etc.)
+    layout/                  # TopBar, BottomNav, DesktopSideNav
+    screens/                 # 20 screens (Home, Shop, Product, Cart, Checkout, etc.)
     onboarding/              # Vendor/Provider/Rider onboarding flows
     shared/                  # ProductCard, VendorCard, EmptyState
     ui/                      # shadcn/ui primitives
@@ -103,18 +84,26 @@ src/
     QueryProvider.tsx
   lib/
     api-client.ts            # fetch wrapper with credentials + error handling
-    auth.ts                  # bcrypt + JWT + cookie helpers
-    db.ts                    # Prisma client
+    auth.ts                  # bcrypt + JWT + cookie helpers (requireUser, requireAdmin)
+    db.ts                    # MongoDB data layer with Prisma-shaped API
+    db-backend.ts            # DB backend detection (MongoDB-only)
     hooks.ts                 # All TanStack Query hooks
-    mock-data.ts             # Seed source + naira formatter + category constants
     store.ts                 # Zustand store (view router, cart, toasts)
     types.ts                 # All TypeScript domain types
+    errors.ts                # Centralized error → friendly message mapping
+    payments/{provider,paystack}.ts   # Paystack + mock provider
+    email/                   # Resend client + templates + send pipeline
+    auth-providers/          # Firebase client + admin + Google OAuth
 scripts/
-  seed.ts                    # Seeds DB from mock-data.ts
-  capture-screens.py         # Captures screenshots for documentation
+  init-mongodb.ts            # Verifies connectivity + pre-creates indexes
+  capture-screens.{py,sh}    # Screenshot helper (platform-internal)
+  gen-pwa-icons.mjs          # Regenerates PWA icons from source.svg
+tests/
+  fixtures/seed-data.ts     # Sample data for ad-hoc demos (not wired to a
+                            # seed script — see "Demo data" below)
 ```
 
-### The 18 screens
+### The 20 screens
 
 | Screen | Purpose |
 |--------|---------|
@@ -137,8 +126,7 @@ scripts/
 | **Account** | Consumer view + My Businesses + wallet/settings + sign out |
 | **Activity** | Orders / Services / Rides tabs with history |
 | **Search** | Trending + recent + live results across products/stores/providers |
-| **Auth** | Combined login/register with brand header + demo shortcut |
-| **Onboarding (×3)** | Vendor 3-step, Provider 3-step, Rider 4-step with document upload UI |
+| **Auth** | Combined login/register with brand header + Google sign-in |
 
 ### Bottom navigation
 
@@ -150,18 +138,22 @@ The center **Sell** button is the prominent gateway to multi-capability onboardi
 
 ## Database schema
 
-11 models covering the full Rush domain:
+The collections live in MongoDB and are defined in `src/lib/db.ts` (see the `MODELS` constant and `ensureIndexes()`):
 
-- `User` — single account, holds capabilities JSON
-- `VendorProfile` — store, slug, visibility (PUBLIC / LINK_ONLY / PRIVATE)
-- `Product` — belongs to vendor
-- `Provider` — service business, has many `Service`
-- `ServiceJob` — customer-posted job (OPEN / QUOTED / ASSIGNED / etc.)
-- `Order` — products order with timeline JSON
-- `RiderProfile` — rider with PENDING_VERIFICATION / ACTIVE status
-- `Vehicle` — registered to a rider
-- `Ride` — passenger ride
-- `Wallet` + `WalletLedgerEntry` — Rush Wallet for escrow / payouts
+- `users` — single account, holds capabilities JSON
+- `vendor_profiles` — store, slug, visibility (PUBLIC / LINK_ONLY / PRIVATE)
+- `products` — belongs to vendor
+- `providers` — service business, has many `services`
+- `services` — service offered by a provider
+- `service_jobs` — customer-posted job (OPEN / QUOTED / ASSIGNED / etc.)
+- `orders` — products order with timeline JSON
+- `rider_profiles` — rider with PENDING_VERIFICATION / ACTIVE status
+- `vehicles` — registered to a rider
+- `rides` — passenger ride
+- `rider_jobs` — per-rider offer/accept state (OFFERED → ACCEPTED → IN_PROGRESS → COMPLETED/CANCELLED)
+- `wallets` + `wallet_ledger_entries` — Rush Wallet for escrow / payouts
+- `payments` — Paystack transaction records (reference, amount, status, providerResponse)
+- `email_deliveries` — per-email delivery log for idempotency
 
 ## API routes
 
@@ -171,22 +163,34 @@ The center **Sell** button is the prominent gateway to multi-capability onboardi
 | POST | `/api/auth/login` | Verify password, set session cookie |
 | POST | `/api/auth/logout` | Clear session cookie |
 | GET | `/api/auth/me` | Current authenticated user (or null) |
+| POST | `/api/auth/firebase` | Exchange Firebase ID token for a RUSH session cookie |
 | GET | `/api/products` | List products (filter by category, q, vendorId) |
 | GET | `/api/products/:id` | Single product with vendor |
 | GET | `/api/stores` | List vendors (filter by visibility) |
-| GET | `/api/stores/:slug` | Single vendor with products |
+| GET | `/api/stores/:slug` | Single vendor with products (PRIVATE stores excluded) |
 | GET | `/api/providers` | List providers (filter by category, q) |
 | GET | `/api/providers/:slug` | Single provider with services |
-| POST | `/api/orders` | Create order (requires auth) |
-| GET | `/api/orders` | Current user's orders |
-| GET | `/api/orders/:id` | Single order with vendor + rider |
+| POST | `/api/orders` | Create order (server-authoritative pricing, stock-checked) |
+| GET | `/api/orders` | Current user's orders (capped at 50) |
+| GET | `/api/orders/:id` | Single order with vendor + rider (3-way owner check) |
 | PATCH | `/api/orders/:id` | Update status, push timeline step |
 | POST | `/api/onboarding/vendor` | Create VendorProfile + add VENDOR capability |
 | POST | `/api/onboarding/provider` | Create Provider + add SERVICE_PROVIDER capability |
 | POST | `/api/onboarding/rider` | Create RiderProfile + Vehicle + add RIDER capability |
-| GET | `/api/rides` | Current user's rides |
+| GET | `/api/rides` | Current user's rides (capped at 50) |
 | POST | `/api/rides` | Request a ride (requires auth) |
 | GET | `/api/rides/:id` | Single ride with rider + vehicle |
+| GET | `/api/rider-jobs` | Rider's job queue (capped at 50, polled every 8s) |
+| PATCH | `/api/rider-jobs/:id` | ACCEPT / DECLINE / ADVANCE a job (atomic with $transaction) |
+| GET | `/api/service-jobs` | List service jobs |
+| PATCH | `/api/service-jobs/:id` | Update service job |
+| POST | `/api/payments/initiate` | Initiate Paystack transaction for an order |
+| POST | `/api/payments/verify` | Verify Paystack transaction + re-check amount + advance order |
+| POST | `/api/payments/webhook` | Paystack webhook (HMAC-verified, defense-in-depth verify) |
+| GET | `/api/riders/available` | List active riders |
+| GET/PATCH | `/api/riders/me` | Current rider's profile / go online-offline |
+| GET | `/api/health` | Real health check: MongoDB ping + latency |
+| GET/POST/PATCH | `/api/admin/*` | Admin-only: users, vendors, providers, riders, products, orders, rides, service-jobs, stats, system |
 
 ## What's intentionally stubbed
 
@@ -194,34 +198,47 @@ These are operational flows that need business-logic decisions:
 
 - **Order status progression** — orders start in `PLACED` but the timeline doesn't auto-advance (no vendor acceptance / rider assignment logic yet)
 - **Rider auto-assignment** — orders don't get a rider assigned automatically
-- **Wallet debit on order** — placing an order doesn't deduct from the wallet yet
-- **Ride matching** — requested rides stay in `SEARCHING` until manually assigned
+- **Wallet debit on order** — placing an order with `paymentMethod: "WALLET"` does not yet deduct from the wallet (see `TODO` in `CheckoutScreen.tsx`)
+- **Ride matching** — requested rides are broadcast to up to 8 eligible riders; first-to-accept wins via an atomic `$transaction`-guarded flip
 - **Image uploads** — currently using Unsplash URLs. Real product/logo uploads would need S3-compatible storage
 - **Real-time updates** — order/ride tracking polls every 5s. WebSocket would be cleaner
 
-## Demo data (after `bun run db:seed`)
+## Demo data
 
-- **1 demo user**: `jesu@rush.app` / `password123` (wallet: ₦12,500)
-- **5 vendors**: Campus Gadgets, Aunty Bisi Kitchen, Sneaker Plug NG, Gracious Groceries, Tunde Phones
-- **14 products** across Electronics, Fashion, Food, Groceries
-- **4 service providers** across Cleaning, Electrical, Plumbing, Beauty
-- **2 sample orders** (RSH-20394 ON_THE_WAY, RSH-20390 DELIVERED)
-- **1 sample ride** (RSH-RIDE-5821)
+There is **no seed script wired to `bun run`**. A fixture module exists at `tests/fixtures/seed-data.ts` for ad-hoc demos and manual testing; if you want to populate a fresh DB, import the symbols from that file in a one-off script.
 
-The demo user already has `CUSTOMER` + `VENDOR` (Campus Gadgets) + `SERVICE_PROVIDER` (pending) capabilities. Walk through Rider onboarding to add the 4th.
-
-## Migrating to PostgreSQL or MongoDB
-
-Edit `prisma/schema.prisma`:
-
-```prisma
-datasource db {
-  provider = "postgresql"   // or "mongodb"
-  url      = env("DATABASE_URL")
-}
+To wipe the database:
+```bash
+# Drop all collections via the mongo shell, or just delete the cluster
+# in the Atlas UI. There's no `bun run db:reset` yet.
 ```
 
-Then `bun run db:push`. The rest of the codebase is DB-agnostic.
+## Local development
+
+```bash
+bun install
+bun run dev
+```
+
+You can also run `bun run db:init-mongo` once to verify the connection and pre-create indexes:
+```bash
+MONGODB_URI=mongodb://localhost:27017 bun run scripts/init-mongodb.ts
+```
+
+## Bootstrapping the first admin
+
+The first admin can't be created via the API — every admin-mutation endpoint requires an existing admin to call it. There's a bootstrap script for that:
+
+```bash
+# After the user has registered via the sign-in screen:
+bun run db:admin rush4service@gmail.com
+```
+
+The script auto-loads `.env.local` and `.env` from the project root, so you just need `MONGODB_URI` set there. It looks up the user by email (case-insensitive), parses their capabilities JSON, adds `{ type: "ADMIN", status: "ACTIVE" }` if not already present, and persists back to the user record. Idempotent — running twice is a no-op the second time. If the user doesn't exist yet, the script tells you to register first.
+
+After promotion, sign in at `/account` — the Admin Panel tab will appear.
+
+Note: the script runs under Node (via the `db:admin` package.json alias) because Bun has an incompatibility with bson v7's `node:v8` startup-snapshot call. This only affects the script runner — `bun run dev` and `bun run build` work normally.
 
 ## License
 

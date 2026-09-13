@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { getCurrentUser, requireUser } from "@/lib/auth";
+import { sendRideNotification } from "@/lib/email";
 
 function serializeRide(ride: any, rider?: { name: string; avatar: string | null; rating: number; vehiclePlate: string; vehicleModel: string } | null) {
   return {
@@ -41,6 +42,9 @@ export async function GET(req: NextRequest) {
     const rides = await db.ride.findMany({
       where,
       orderBy: { createdAt: "desc" },
+      // Cap page size — previously returned every ride matching the
+      // scope, growing unbounded over time.
+      take: 50,
       include: { rider: { include: { vehicle: true } } },
     });
 
@@ -125,6 +129,23 @@ export async function POST(req: NextRequest) {
       await db.riderJob.createMany({
         data: pool.map((r) => ({ riderId: r.id, type: "RIDE", status: "OFFERED", rideId: ride.id })),
       });
+    }
+
+    // Fire-and-forget ride-requested email.
+    try {
+      await sendRideNotification({
+        userId: user.id,
+        email: user.email,
+        name: user.name,
+        rideCode: ride.code,
+        status: "SEARCHING",
+        pickup,
+        destination,
+        fare: ride.fare,
+        type: "RIDE_REQUESTED",
+      });
+    } catch (emailErr) {
+      console.error("[rides POST] email failed:", emailErr);
     }
 
     return NextResponse.json({ ride: serializeRide(ride), candidateCount: pool.length });

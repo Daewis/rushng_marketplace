@@ -274,4 +274,6 @@ export interface NavParams {
   category?: string;
   query?: string;
   jobId?: string;
+  /** Active admin sub-tab. Only meaningful when `view === "admin"`. */
+  tab?: string;
 }

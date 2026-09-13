@@ -22,11 +22,17 @@ if (!MONGODB_URI) {
   process.exit(1);
 }
 
+// After the `if (!MONGODB_URI) process.exit(1)` above, TypeScript
+// still considers `MONGODB_URI` to be `string | undefined` because
+// `process.exit` doesn't narrow. We use a runtime-asserted const
+// here so the rest of the file gets the narrowed `string` type.
+const URI: string = MONGODB_URI;
+
 async function main() {
-  const client = new MongoClient(MONGODB_URI, {
+  const client = new MongoClient(URI, {
     serverSelectionTimeoutMS: 10000,
   });
-  console.log(`Connecting to MongoDB at ${MONGODB_URI.replace(/:\/\/[^@]+@/, "://***:***@")}...`);
+  console.log(`Connecting to MongoDB at ${URI.replace(/:\/\/[^@]+@/, "://***:***@")}...`);
   await client.connect();
   const db = client.db(MONGODB_DB);
   console.log(`Connected. Database: ${db.databaseName}`);

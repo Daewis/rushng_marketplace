@@ -19,6 +19,10 @@ export async function GET(req: NextRequest) {
     const jobs = await db.riderJob.findMany({
       where: { riderId: riderProfile.id, ...(statuses ? { status: { in: statuses } } : {}) },
       orderBy: { createdAt: "desc" },
+      // Cap page size. Previously returned every job for the rider
+      // with no limit; combined with the 8s poll interval on the
+      // rider dashboard, the payload would grow forever.
+      take: 50,
       include: {
         order: { include: { vendor: { select: { businessName: true } } } },
         ride: { include: { customer: { select: { name: true, phone: true } } } },

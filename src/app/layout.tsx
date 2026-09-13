@@ -47,11 +47,9 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   themeColor: "#FF6B1A",
-  appleWebApp: {
-    capable: true,
-    statusBarStyle: "default",
-    title: "Rush",
-  },
+  // `appleWebApp` is a `Metadata` field in Next 16, not a `Viewport`
+  // field — previously this caused a TS build error. The metadata
+  // export above already sets it correctly.
 };
 
 export default function RootLayout({

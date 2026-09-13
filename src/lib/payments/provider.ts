@@ -99,8 +99,25 @@ export const mockPaymentProvider: PaymentProvider = {
 
 /**
  * Returns the provider to actually use for a given request.
- * Falls back to mock when Paystack isn't configured.
+ *
+ * Falls back to mock when Paystack isn't configured IN DEVELOPMENT. In
+ * production, refusing to configure Paystack is treated as a fatal
+ * config error — previously a production deploy that forgot to set
+ * `PAYSTACK_SECRET_KEY` would silently swap in the mock provider,
+ * which marks every payment as SUCCESS with no real charge, letting
+ * customers "pay" 1 NGN for a ₦100,000 order.
  */
 export function getPaymentProvider(): PaymentProvider {
-  return activePaymentProvider.isConfigured ? activePaymentProvider : mockPaymentProvider;
+  if (activePaymentProvider.isConfigured) {
+    return activePaymentProvider;
+  }
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "PAYSTACK_SECRET_KEY is not set in production. Refusing to fall back " +
+        "to the mock payment provider — a missing secret in production would " +
+        "let customers receive orders without paying. Set PAYSTACK_SECRET_KEY " +
+        "(and NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY) before deploying.",
+    );
+  }
+  return mockPaymentProvider;
 }

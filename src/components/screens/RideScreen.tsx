@@ -1,6 +1,7 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import dynamic from "next/dynamic";
 import { ChevronLeft, MapPin, Navigation, Bike, Car, Truck, Clock, Star, Shield, X, CreditCard, Loader2, XCircle } from "lucide-react";
 import { useRush } from "@/lib/store";
 import { CONTENT_WIDTH } from "@/lib/layout";
@@ -9,6 +10,47 @@ import { naira } from "@/lib/data";
 import type { RideType } from "@/lib/types";
 import { ApiError } from "@/lib/api-client";
 import { BackHeader } from "./CartScreen";
+
+// Leaflet references `window` at module-load time, so we must load
+// RideMap only on the client. The `ssr: false` option means the
+// homepage prerender won't try to execute Leaflet's code.
+const RideMap = dynamic(
+  () => import("@/components/maps/RideMap").then((m) => m.RideMap),
+  { ssr: false, loading: () => (
+    <div className="rounded-2xl bg-muted/40 flex items-center justify-center text-ink-soft text-xs" style={{ height: 240 }}>
+      <Loader2 className="h-4 w-4 animate-spin" />
+    </div>
+  ) },
+);
+
+/**
+ * Geocode an address string to [lat, lng] via Nominatim (free OSM
+ * geocoder). Returns null on failure or if the address is empty.
+ *
+ * Nominatim's usage policy requires:
+ *   - A valid HTTP Referer or User-Agent
+ *   - Max 1 request/sec
+ *   - No heavy usage (we only call this when the user clicks "use
+ *     this location" or submits the form, never on keystroke)
+ *
+ * We don't debounce — caller is responsible for calling sparingly.
+ */
+async function geocodeAddress(address: string): Promise<[number, number] | null> {
+  if (!address.trim()) return null;
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(address)}`;
+    const res = await fetch(url, {
+      headers: { "Accept-Language": "en" },
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    if (!Array.isArray(data) || data.length === 0) return null;
+    const { lat, lon } = data[0];
+    return [parseFloat(lat), parseFloat(lon)];
+  } catch {
+    return null;
+  }
+}
 
 const RIDE_OPTIONS: Array<{
   type: RideType;
@@ -27,14 +69,22 @@ const RIDE_OPTIONS: Array<{
 const BASE_FARE = 800;
 const PER_KM = 120;
 
+// Lagos landmarks for default pickup/destination — gives the user a
+// working map as soon as they open the screen without having to type
+// first.
+const DEFAULT_PICKUP_COORDS: [number, number] = [6.5059, 3.3779]; // Yaba
+const DEFAULT_DESTINATION_COORDS: [number, number] = [6.5531, 3.3634]; // Maryland
+
 export function RideScreen() {
   const { back, navigate, pushToast } = useRush();
   const [pickup, setPickup] = useState("Yaba Market, Lagos");
   const [destination, setDestination] = useState("Maryland Mall, Lagos");
   const [selectedType, setSelectedType] = useState<RideType>("BIKE");
+  const [pickupCoords, setPickupCoords] = useState<[number, number] | undefined>(DEFAULT_PICKUP_COORDS);
+  const [destinationCoords, setDestinationCoords] = useState<[number, number] | undefined>(DEFAULT_DESTINATION_COORDS);
   const requestRideMut = useRequestRide();
 
-  const distanceKm = 6.4;
+  const distanceKm = 6.4; // TODO: compute from coords using haversine
   const baseFare = BASE_FARE + distanceKm * PER_KM;
   const selectedOpt = RIDE_OPTIONS.find((r) => r.type === selectedType)!;
   const fare = Math.round(baseFare * selectedOpt.multiplier);
@@ -60,35 +110,14 @@ export function RideScreen() {
     <div className="pb-28 min-h-screen">
       <BackHeader title="Book a ride" onBack={back} />
 
-      {/* Map preview */}
-      <div className="relative h-56 bg-gradient-to-br from-emerald-50 via-sky-50 to-emerald-100 overflow-hidden">
-        <div
-          className="absolute inset-0 opacity-30"
-          style={{
-            backgroundImage: `
-              linear-gradient(90deg, transparent 49%, #cbd5e1 49%, #cbd5e1 51%, transparent 51%),
-              linear-gradient(0deg, transparent 49%, #cbd5e1 49%, #cbd5e1 51%, transparent 51%)
-            `,
-            backgroundSize: "28px 28px",
-          }}
+      {/* Real map — OpenStreetMap tiles via Leaflet */}
+      <div className="px-4 pt-3">
+        <RideMap
+          pickup={pickupCoords}
+          destination={destinationCoords}
+          height={240}
+          className="rounded-2xl overflow-hidden border border-border shadow-card"
         />
-        <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="none" viewBox="0 0 100 100">
-          <path
-            d="M 15 80 Q 50 60 50 40 Q 50 20 85 25"
-            stroke="#FF6B1A"
-            strokeWidth="2.5"
-            fill="none"
-            strokeLinecap="round"
-          />
-          <circle cx="15" cy="80" r="3.5" fill="#FF6B1A" stroke="white" strokeWidth="2" />
-          <circle cx="85" cy="25" r="3.5" fill="#1F2937" stroke="white" strokeWidth="2" />
-        </svg>
-
-        <div className="absolute top-3 right-3 flex gap-1.5">
-          <button className="h-8 w-8 rounded-lg bg-background/90 backdrop-blur-sm flex items-center justify-center shadow-sm">
-            <Navigation className="h-4 w-4 text-rush" />
-          </button>
-        </div>
       </div>
 
       {/* Address fields */}
@@ -99,6 +128,15 @@ export function RideScreen() {
             value={pickup}
             onChange={setPickup}
             placeholder="Pickup location"
+            onGeocode={async (addr) => {
+              const c = await geocodeAddress(addr);
+              if (c) {
+                setPickupCoords(c);
+                pushToast({ title: "Pickup found on map" });
+              } else {
+                pushToast({ title: "Couldn't find that address" });
+              }
+            }}
           />
           <div className="border-t border-border" />
           <AddressRow
@@ -106,6 +144,15 @@ export function RideScreen() {
             value={destination}
             onChange={setDestination}
             placeholder="Where are you going?"
+            onGeocode={async (addr) => {
+              const c = await geocodeAddress(addr);
+              if (c) {
+                setDestinationCoords(c);
+                pushToast({ title: "Destination found on map" });
+              } else {
+                pushToast({ title: "Couldn't find that address" });
+              }
+            }}
           />
         </div>
       </div>
@@ -208,13 +255,16 @@ function AddressRow({
   color,
   value,
   onChange,
+  onGeocode,
   placeholder,
 }: {
   color: string;
   value: string;
   onChange: (v: string) => void;
+  onGeocode?: (addr: string) => void | Promise<void>;
   placeholder: string;
 }) {
+  const [locating, setLocating] = useState(false);
   return (
     <div className="flex items-center gap-2.5">
       <span className={`h-2.5 w-2.5 rounded-full ${color} shrink-0`} />
@@ -224,8 +274,30 @@ function AddressRow({
         placeholder={placeholder}
         className="flex-1 bg-transparent text-sm text-ink focus:outline-none placeholder:text-ink-soft"
       />
+      {onGeocode && value && (
+        <button
+          onClick={async () => {
+            setLocating(true);
+            try {
+              await onGeocode(value);
+            } finally {
+              setLocating(false);
+            }
+          }}
+          disabled={locating}
+          className="text-rush hover:text-rush-deep disabled:opacity-50 shrink-0"
+          aria-label="Find on map"
+          title="Find on map"
+        >
+          {locating ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Navigation className="h-3.5 w-3.5" />
+          )}
+        </button>
+      )}
       {value && (
-        <button onClick={() => onChange("")} className="text-ink-soft hover:text-ink" aria-label="Clear">
+        <button onClick={() => onChange("")} className="text-ink-soft hover:text-ink shrink-0" aria-label="Clear">
           <X className="h-3.5 w-3.5" />
         </button>
       )}
@@ -237,6 +309,29 @@ export function RideTrackingScreen() {
   const { back, params, pushToast } = useRush();
   const { data, isLoading } = useRide(params.rideId);
   const cancelRide = useCancelRide();
+  // Geocoded pickup/destination coords — set on ride load so the
+  // map shows the right markers without needing lat/lng on the ride
+  // model itself.
+  const [pickupCoords, setPickupCoords] = useState<[number, number] | null>(null);
+  const [destinationCoords, setDestinationCoords] = useState<[number, number] | null>(null);
+
+  // Once we have the ride, geocode pickup & destination in parallel.
+  // Nominatim usage policy asks for ≤1 req/sec; we fire both at once
+  // on mount (which is a single user-initiated event) — acceptable.
+  useEffect(() => {
+    if (!data?.ride) return;
+    let cancelled = false;
+    (async () => {
+      const [p, d] = await Promise.all([
+        geocodeAddress(data.ride.pickup),
+        geocodeAddress(data.ride.destination),
+      ]);
+      if (cancelled) return;
+      if (p) setPickupCoords(p);
+      if (d) setDestinationCoords(d);
+    })();
+    return () => { cancelled = true; };
+  }, [data?.ride]);
 
   if (isLoading) {
     return (
@@ -276,32 +371,23 @@ export function RideTrackingScreen() {
     <div className="pb-6 min-h-screen">
       <BackHeader title={`Ride ${ride.code}`} onBack={back} />
 
-      {/* Map */}
-      <div className="relative h-72 bg-gradient-to-br from-emerald-50 via-sky-50 to-emerald-100 overflow-hidden">
-        <div
-          className="absolute inset-0 opacity-30"
-          style={{
-            backgroundImage: `
-              linear-gradient(90deg, transparent 49%, #cbd5e1 49%, #cbd5e1 51%, transparent 51%),
-              linear-gradient(0deg, transparent 49%, #cbd5e1 49%, #cbd5e1 51%, transparent 51%)
-            `,
-            backgroundSize: "28px 28px",
-          }}
+      {/* Real map — geocode the ride's pickup/destination on mount */}
+      <div className="px-4 pt-3">
+        <RideMap
+          pickup={pickupCoords ?? undefined}
+          destination={destinationCoords ?? undefined}
+          rideStatus={ride.status}
+          height={280}
+          className="rounded-2xl overflow-hidden border border-border shadow-card"
         />
-        <svg className="absolute inset-0 w-full h-full" preserveAspectRatio="none" viewBox="0 0 100 100">
-          <path d="M 15 80 Q 50 60 50 40 Q 50 20 85 25" stroke="#FF6B1A" strokeWidth="3" fill="none" strokeLinecap="round" />
-          <circle cx="15" cy="80" r="4" fill="#FF6B1A" stroke="white" strokeWidth="2.5" />
-          <circle cx="50" cy="40" r="5" fill="white" stroke="#FF6B1A" strokeWidth="3">
-            <animate attributeName="r" values="5;6;5" dur="1.5s" repeatCount="indefinite" />
-          </circle>
-          <circle cx="85" cy="25" r="4" fill="#1F2937" stroke="white" strokeWidth="2.5" />
-        </svg>
 
-        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 px-3 py-1.5 rounded-full bg-background/90 backdrop-blur-sm shadow-sm flex items-center gap-1.5">
-          <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
-          <span className="text-xs font-bold text-ink">
-            {ride.status === "SEARCHING" ? "Finding rider…" : `En route · ${ride.estimatedMin} min`}
-          </span>
+        <div className="mt-2 flex items-center justify-center">
+          <div className="px-3 py-1.5 rounded-full bg-background/90 backdrop-blur-sm shadow-sm flex items-center gap-1.5">
+            <span className="h-2 w-2 rounded-full bg-success animate-pulse" />
+            <span className="text-xs font-bold text-ink">
+              {ride.status === "SEARCHING" ? "Finding rider…" : `En route · ${ride.estimatedMin} min`}
+            </span>
+          </div>
         </div>
       </div>
 

@@ -397,3 +397,143 @@ export function useOnboardRider() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["me"] }),
   });
 }
+
+// ─── Profile edit + uploads + follows + notifications ──────────────────
+
+export function useUpdateProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: { name?: string; phone?: string; avatar?: string; location?: string }) => {
+      const res = await fetch("/api/auth/me", {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to update profile");
+      }
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["me"] }),
+  });
+}
+
+export function useUploadFile() {
+  return useMutation({
+    mutationFn: async (file: File): Promise<{ url: string; size: number; contentType: string }> => {
+      const fd = new FormData();
+      fd.append("file", file);
+      const res = await fetch("/api/uploads", {
+        method: "POST",
+        credentials: "include",
+        body: fd,
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to upload file");
+      }
+      return res.json();
+    },
+  });
+}
+
+export function useUpdateStore(slug: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (body: Record<string, unknown>) => {
+      const res = await fetch(`/api/stores/${slug}`, {
+        method: "PATCH",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to update store");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ["store", slug] });
+      qc.invalidateQueries({ queryKey: ["me"] });
+    },
+  });
+}
+
+export function useFollow(targetType: "vendor" | "provider", targetId?: string) {
+  const qc = useQueryClient();
+  const key = ["follow", targetType, targetId];
+  return useQuery<{ following: boolean }>({
+    queryKey: key,
+    queryFn: async () => {
+      if (!targetId) return { following: false };
+      const res = await fetch(`/api/follows?targetType=${targetType}&targetId=${targetId}`, { credentials: "include" });
+      if (!res.ok) return { following: false };
+      return res.json();
+    },
+    enabled: !!targetId,
+  });
+}
+
+export function useToggleFollow() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ targetType, targetId, follow }: { targetType: "vendor" | "provider"; targetId: string; follow: boolean }) => {
+      const res = await fetch(`/api/follows?targetType=${targetType}&targetId=${targetId}`, {
+        method: follow ? "POST" : "DELETE",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetType, targetId }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to toggle follow");
+      }
+      return res.json();
+    },
+    onSuccess: (_data, vars) => {
+      qc.invalidateQueries({ queryKey: ["follow", vars.targetType, vars.targetId] });
+    },
+  });
+}
+
+export interface AppNotification {
+  id: string;
+  type: "ORDER_UPDATE" | "RIDE_UPDATE" | "PAYMENT" | "FOLLOW" | "SYSTEM";
+  title: string;
+  body?: string | null;
+  link?: { view: string; params?: Record<string, string> } | null;
+  read: boolean;
+  createdAt: string;
+}
+
+export function useNotifications() {
+  return useQuery<{ notifications: AppNotification[]; unreadCount: number }>({
+    queryKey: ["notifications"],
+    queryFn: async () => {
+      const res = await fetch("/api/notifications", { credentials: "include" });
+      if (!res.ok) return { notifications: [], unreadCount: 0 };
+      return res.json();
+    },
+    // Poll every 30s — matches the rest of the app's polling cadence.
+    refetchInterval: 30_000,
+    refetchIntervalInBackground: false,
+  });
+}
+
+export function useMarkNotificationsRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/notifications?action=mark-all-read", {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!res.ok) throw new Error("Failed to mark notifications read");
+      return res.json();
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
+  });
+}

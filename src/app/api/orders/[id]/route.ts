@@ -3,6 +3,7 @@ import { db } from "@/lib/db";
 import { getCurrentUser, requireUser } from "@/lib/auth";
 import { canCancel, customerCanCancel, getNextStep, getStepOwner, isTerminal } from "@/lib/order-status";
 import { serializeOrder } from "@/lib/order-serialize";
+import { sendOrderNotification } from "@/lib/email";
 
 export async function GET(
   _req: NextRequest,
@@ -127,6 +128,29 @@ export async function PATCH(
         where: { orderId: id, status: { in: ["OFFERED", "ACCEPTED"] } },
         data: { status: "CANCELLED", respondedAt: new Date() },
       });
+      // ⚠ Stock restoration — refund the items back to inventory.
+      // We only restore if the order had actually decremented stock
+      // (i.e. it was past PLACED). Since stock is decremented at
+      // order-creation time, every cancel restores stock. Safe to
+      // call even if items is malformed — the try/catch below
+      // protects against parse failures.
+      try {
+        const items = JSON.parse(order.items);
+        if (Array.isArray(items)) {
+          for (const item of items) {
+            if (item.productId && typeof item.quantity === "number" && item.quantity > 0) {
+              await db.product.update({
+                where: { id: item.productId },
+                data: { stock: { increment: item.quantity } },
+              });
+            }
+          }
+        }
+      } catch (stockErr: any) {
+        // Don't fail the cancel if stock restoration fails — but
+        // log loudly so we can reconcile manually.
+        console.error("[order PATCH] stock restoration failed:", stockErr?.message ?? stockErr);
+      }
     } else {
       const owner = getStepOwner(order.fulfilment, order.status);
       if (owner === "RIDER") {
@@ -185,6 +209,41 @@ export async function PATCH(
     if (updated.riderId) {
       const r = await db.riderProfile.findUnique({ where: { id: updated.riderId }, include: { vehicle: true } });
       if (r) riderInfo = { name: r.name, avatar: r.avatar, rating: r.rating, vehicleType: r.vehicle?.type || null, plate: r.vehicle?.plate || null };
+    }
+
+    // Send the customer an order-status email if the status actually
+    // changed and there's a matching email type. The sendOrderNoti-
+    // -fication helper uses an idempotency key per (orderCode, type)
+    // so duplicate emails can't fire even if PATCH is called twice.
+    const statusToEmailType: Record<string, "ORDER_CONFIRMED" | "ORDER_PREPARING" | "ORDER_RIDER_ASSIGNED" | "ORDER_ON_THE_WAY" | "ORDER_DELIVERED" | "ORDER_PICKED_UP" | "ORDER_CANCELLED" | undefined> = {
+      CONFIRMED: "ORDER_CONFIRMED",
+      PREPARING: "ORDER_PREPARING",
+      RIDER_ASSIGNED: "ORDER_RIDER_ASSIGNED",
+      ON_THE_WAY: "ORDER_ON_THE_WAY",
+      PICKED_UP: "ORDER_PICKED_UP",
+      DELIVERED: "ORDER_DELIVERED",
+      CANCELLED: "ORDER_CANCELLED",
+    };
+    const emailType = statusToEmailType[nextStatus];
+    if (emailType && order.customerId) {
+      const customer = await db.user.findUnique({ where: { id: order.customerId } });
+      if (customer) {
+        try {
+          await sendOrderNotification({
+            userId: customer.id,
+            email: customer.email,
+            name: customer.name,
+            orderCode: updated.code,
+            status: nextStatus,
+            total: updated.total,
+            vendorName: order.vendor.businessName,
+            deliveryAddress: updated.deliveryAddress || undefined,
+            type: emailType,
+          });
+        } catch (emailErr) {
+          console.error("[order PATCH] email failed:", emailErr);
+        }
+      }
     }
 
     return NextResponse.json({ order: serializeOrder(updated, order.vendor, riderInfo), riderJobId: newRiderJobId });

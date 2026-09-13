@@ -52,3 +52,17 @@ prompt
 server.log
 # Skills directory
 /skills/
+
+# PWA build artifacts — regenerated on every `next build` by @ducanh2912/next-pwa.
+public/sw.js
+public/workbox-*.js
+public/worker-*.js
+public/fallback-*.js
+
+# User-uploaded content — runtime data, not source.
+# (Keep the directory itself with a .gitkeep so the path exists.)
+public/uploads/*
+!public/uploads/.gitkeep
+
+# Test coverage output
+/coverage/

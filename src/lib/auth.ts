@@ -3,10 +3,30 @@ import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
 import { db } from "./db";
 
-const JWT_SECRET = new TextEncoder().encode(
-  process.env.JWT_SECRET || "rush-dev-secret-change-in-production-please",
-);
+/**
+ * JWT signing secret. MUST be set via the JWT_SECRET environment variable.
+ *
+ * Previously this had a hardcoded fallback ("rush-dev-secret-change-in-
+ * production-please"), which meant any deployment that forgot to set
+ * JWT_SECRET would silently sign sessions with a publicly-readable
+ * string committed to the repo — letting anyone mint admin JWTs.
+ *
+ * We now refuse to boot if the secret is missing. Generate one with:
+ *   openssl rand -hex 32
+ */
+function getJwtSecret(): Uint8Array {
+  const raw = process.env.JWT_SECRET;
+  if (!raw || raw.length < 32) {
+    throw new Error(
+      "JWT_SECRET environment variable is required and must be at least 32 characters. " +
+        "Generate one with: openssl rand -hex 32",
+    );
+  }
+  return new TextEncoder().encode(raw);
+}
 
+// Lazy getter so the throw happens at first request, not at module load
+// (otherwise `next build` would crash type-checking).
 const COOKIE_NAME = "rush_session";
 const SESSION_DURATION = 60 * 60 * 24 * 30; // 30 days
 
@@ -17,7 +37,10 @@ export interface SessionUser {
 }
 
 export async function hashPassword(password: string): Promise<string> {
-  return bcrypt.hash(password, 10);
+  // OWASP recommends a bcrypt cost factor of at least 12. Previously
+  // this was 10; bumped to 12 (~250ms per hash on a modern CPU, still
+  // fine for login throughput at our scale).
+  return bcrypt.hash(password, 12);
 }
 
 export async function verifyPassword(
@@ -32,12 +55,12 @@ export async function createToken(userId: string): Promise<string> {
     .setProtectedHeader({ alg: "HS256" })
     .setIssuedAt()
     .setExpirationTime(`${SESSION_DURATION}s`)
-    .sign(JWT_SECRET);
+    .sign(getJwtSecret());
 }
 
 export async function verifyToken(token: string): Promise<{ sub: string } | null> {
   try {
-    const { payload } = await jwtVerify(token, JWT_SECRET);
+    const { payload } = await jwtVerify(token, getJwtSecret());
     return { sub: payload.sub as string };
   } catch {
     return null;

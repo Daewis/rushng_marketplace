@@ -80,8 +80,20 @@ export function CheckoutScreen() {
           return;
         }
       } else if (payment === "WALLET") {
-        // TODO: implement wallet debit. For now, treat as auto-paid.
-        pushToast({ title: "Wallet payment", description: "Wallet debit not yet implemented." });
+        // Debit the wallet atomically via /api/wallet/debit. Refuses
+        // to overdraw — returns 402 with a clear message if the
+        // wallet has less than the order total. On success, the
+        // order is auto-CONFIRMED (no Paystack round-trip needed).
+        const walletRes = await api.post<{
+          ok: boolean;
+          orderId: string;
+          balance: number;
+          amount: number;
+        }>("/api/wallet/debit", { orderId: res.order.id });
+        pushToast({
+          title: "Wallet payment successful",
+          description: `₦${walletRes.amount.toLocaleString()} debited. New balance: ₦${walletRes.balance.toLocaleString()}.`,
+        });
       } else if (payment === "CASH_ON_DELIVERY") {
         // No upfront payment — the customer pays the rider on delivery.
       }

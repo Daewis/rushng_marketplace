@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ChevronLeft, Star, MapPin, Phone, MessageCircle, Share2, Shield, ShoppingBag, Instagram, Heart, Truck, Loader2 } from "lucide-react";
 import { useRush } from "@/lib/store";
 import { CONTENT_WIDTH } from "@/lib/layout";
-import { useStore } from "@/lib/hooks";
+import { useStore, useFollow, useToggleFollow } from "@/lib/hooks";
 import { naira } from "@/lib/data";
 import { BackHeader } from "./CartScreen";
 import { ProductCard, EmptyState } from "@/components/shared/Cards";
@@ -126,9 +126,7 @@ export function StoreScreen() {
           >
             <MessageCircle className="h-3.5 w-3.5" /> Chat
           </button>
-          <button className="flex items-center justify-center gap-1.5 py-2.5 rounded-xl rush-gradient text-white text-xs font-bold shadow-rush">
-            <Heart className="h-3.5 w-3.5" /> Follow
-          </button>
+          <FollowButton targetType="vendor" targetId={vendor.id} />
         </div>
 
         {/* Delivery info */}
@@ -249,5 +247,55 @@ function SocialChip({ icon, label }: { icon: React.ReactNode; label: string }) {
       {icon}
       {label}
     </div>
+  );
+}
+
+/**
+ * FollowButton — reusable follow/unfollow button for vendors + providers.
+ * Uses the useFollow hook to read current state and useToggleFollow to
+ * mutate. Shows a loading spinner while the query is loading.
+ */
+function FollowButton({
+  targetType,
+  targetId,
+}: {
+  targetType: "vendor" | "provider";
+  targetId: string;
+}) {
+  const { data, isLoading } = useFollow(targetType, targetId);
+  const toggleMut = useToggleFollow();
+  const following = data?.following ?? false;
+  const { pushToast } = useRush();
+
+  return (
+    <button
+      onClick={async () => {
+        try {
+          await toggleMut.mutateAsync({
+            targetType,
+            targetId,
+            follow: !following,
+          });
+          pushToast({
+            title: following ? "Unfollowed" : "Following",
+          });
+        } catch (err: any) {
+          pushToast({ title: "Failed to toggle follow", description: err.message });
+        }
+      }}
+      disabled={isLoading || toggleMut.isPending}
+      className={`flex items-center justify-center gap-1.5 py-2.5 rounded-xl text-xs font-bold disabled:opacity-50 ${
+        following
+          ? "bg-muted text-ink"
+          : "rush-gradient text-white shadow-rush"
+      }`}
+    >
+      {isLoading ? (
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />
+      ) : (
+        <Heart className={`h-3.5 w-3.5 ${following ? "fill-ink" : ""}`} />
+      )}
+      {following ? "Following" : "Follow"}
+    </button>
   );
 }

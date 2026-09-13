@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { getPaymentProvider, isPaystackConfigured } from "@/lib/payments/provider";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 /**
  * POST /api/payments/initiate
@@ -22,6 +23,10 @@ import { getPaymentProvider, isPaystackConfigured } from "@/lib/payments/provide
  * that auto-succeeds — useful for development and end-to-end testing.
  */
 export async function POST(req: NextRequest) {
+  // Rate limit: 10 payment initiations per minute per IP.
+  const blocked = enforceRateLimit(req, "pay-init", { limit: 10, windowMs: 60_000 });
+  if (blocked) return blocked;
+
   try {
     const user = await requireUser();
     const body = await req.json();

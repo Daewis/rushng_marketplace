@@ -131,6 +131,16 @@ async function ensureIndexes(db: MongoDb) {
     db.collection("payments").createIndex({ reference: 1 }, { unique: true }),
     db.collection("payments").createIndex({ customerId: 1 }),
     db.collection("payments").createIndex({ orderId: 1 }, { sparse: true }),
+    // Follows — unique on (userId, targetType, targetId) so the same
+    // user can't follow the same target twice.
+    db.collection("follows").createIndex(
+      { userId: 1, targetType: 1, targetId: 1 },
+      { unique: true },
+    ),
+    db.collection("follows").createIndex({ userId: 1 }),
+    // Notifications — recent-first per user is the hot read path.
+    db.collection("notifications").createIndex({ userId: 1, createdAt: -1 }),
+    db.collection("notifications").createIndex({ userId: 1, read: 1 }),
   ];
   await Promise.all(tasks);
 }
@@ -152,6 +162,33 @@ export function generateId(): string {
 // ─── Model registry ──────────────────────────────────────────────────────
 
 type RelationKind = "1:1" | "1:many";
+
+/**
+ * All model names (camelCase, matching the `db.<model>` accessors).
+ *
+ * Defined as an explicit literal union BEFORE the `MODELS` constant to
+ * break what would otherwise be a circular type reference (`MODELS:
+ * Record<ModelName, ...>` references `ModelName`, and `type ModelName
+ * = keyof typeof MODELS` would reference `MODELS`). Literal unions are
+ * also faster for TS to resolve than `keyof typeof` queries.
+ */
+type ModelName =
+  | "user"
+  | "vendorProfile"
+  | "product"
+  | "provider"
+  | "service"
+  | "serviceJob"
+  | "order"
+  | "riderProfile"
+  | "vehicle"
+  | "ride"
+  | "riderJob"
+  | "wallet"
+  | "walletLedgerEntry"
+  | "payment"
+  | "follow"
+  | "notification";
 
 interface RelationSpec {
   /** Field name on the parent document (e.g. "vendor" on Product). */
@@ -300,9 +337,21 @@ const MODELS: Record<ModelName, ModelSpec> = {
     idField: "id",
     relations: {},
   },
+  follow: {
+    collection: "follows",
+    idField: "id",
+    relations: {
+      user: { as: "user", fk: "userId", model: "user", kind: "1:1" },
+    },
+  },
+  notification: {
+    collection: "notifications",
+    idField: "id",
+    relations: {
+      user: { as: "user", fk: "userId", model: "user", kind: "1:1" },
+    },
+  },
 };
-
-type ModelName = keyof typeof MODELS;
 
 // ─── Query translation ──────────────────────────────────────────────────
 
@@ -506,22 +555,55 @@ async function prepareCreateData(model: ModelName, data: any): Promise<any> {
  * Translate a Prisma `data` object for update() into a MongoDB update
  * document. Handles:
  *   - Scalar field sets
+ *   - Atomic number ops: { field: { increment: n } } / decrement /
+ *     multiply / divide → translated to Mongo $inc / $mul.
  *   - Nested updates like { vehicle: { update: { plate: "..." } } }
  *   - Nested connects/creates/upserts (deferred to run after the parent
  *     is updated)
+ *
+ * Returns an object with $set, $inc, $mul, deferred. Callers must
+ * merge them into a single Mongo update doc — Mongo rejects an update
+ * that mixes $set on field X with $inc on field X, but $set + $inc
+ * on different fields is fine.
  */
 async function prepareUpdateData(
   model: ModelName,
   data: any,
 ): Promise<{
   $set: Record<string, any>;
+  $inc: Record<string, number>;
+  $mul: Record<string, number>;
   deferred: Array<(parentId: string) => Promise<void>>;
 }> {
   const spec = MODELS[model];
   const $set: Record<string, any> = {};
+  const $inc: Record<string, number> = {};
+  const $mul: Record<string, number> = {};
   const deferred: Array<(parentId: string) => Promise<void>> = [];
   for (const [key, value] of Object.entries(data ?? {})) {
     if (value && typeof value === "object" && !Array.isArray(value) && !(value instanceof Date)) {
+      // Prisma atomic number operators: { field: { increment: n } }
+      // etc. These work on numeric fields and translate to Mongo's
+      // $inc / $mul. We check for them BEFORE the relation path
+      // because they look like objects.
+      if ("increment" in value && typeof value.increment === "number") {
+        $inc[key] = ($inc[key] ?? 0) + value.increment;
+        continue;
+      }
+      if ("decrement" in value && typeof value.decrement === "number") {
+        $inc[key] = ($inc[key] ?? 0) - value.decrement;
+        continue;
+      }
+      if ("multiply" in value && typeof value.multiply === "number") {
+        $mul[key] = value.multiply;
+        continue;
+      }
+      if ("divide" in value && typeof value.divide === "number") {
+        // Mongo's $mul accepts a fraction — divide by N == multiply by 1/N.
+        $mul[key] = 1 / value.divide;
+        continue;
+      }
+
       const nestedUpdate = (value as any).update;
       const nestedConnect = (value as any).connect;
       const nestedCreate = (value as any).create;
@@ -568,7 +650,7 @@ async function prepareUpdateData(
     $set[key] = value;
   }
   $set.updatedAt = new Date();
-  return { $set, deferred };
+  return { $set, $inc, $mul, deferred };
 }
 
 // ─── Relation resolution (include) ────────────────────────────────────────
@@ -581,6 +663,48 @@ async function populateRelations(
   if (!include || docs.length === 0) return;
   const spec = MODELS[model];
   for (const [relName, relInclude] of Object.entries(include)) {
+    // Prisma's `_count: { select: { products: true, orders: true } }`
+    // asks for per-doc counts of related rows. We emulate it by
+    // running one count query per relation per parent id batch.
+    // Previously this was silently dropped, which broke the three
+    // admin-list routes that read `v._count.products` etc. (they
+    // would crash with `Cannot read properties of undefined`).
+    if (relName === "_count") {
+      const selectMap =
+        typeof relInclude === "object" && relInclude?.select
+          ? relInclude.select
+          : null;
+      if (!selectMap) continue;
+      // For each requested relation, batch-count by parent id.
+      for (const countRelName of Object.keys(selectMap)) {
+        const rel = spec.relations[countRelName];
+        if (!rel) continue;
+        const parentIds = unique(docs.map((d) => d.id).filter(Boolean));
+        if (parentIds.length === 0) {
+          docs.forEach((d) => {
+            if (!d._count) d._count = {};
+            d._count[countRelName] = 0;
+          });
+          continue;
+        }
+        // Child-collection case (1:many). For 1:1 the count is
+        // always 0 or 1; we compute it the same way for simplicity.
+        const childCol = await getDb().then((db) => db.collection(MODELS[rel.model].collection));
+        const counts = await childCol.aggregate([
+          { $match: { [rel.fk]: { $in: parentIds } } },
+          { $group: { _id: `$${rel.fk}`, count: { $sum: 1 } } },
+        ]).toArray();
+        const countMap = new Map<string, number>(
+          counts.map((c: any) => [c._id, c.count]),
+        );
+        docs.forEach((d) => {
+          if (!d._count) d._count = {};
+          d._count[countRelName] = countMap.get(d.id) ?? 0;
+        });
+      }
+      continue;
+    }
+
     const rel = spec.relations[relName];
     if (!rel) continue;
     // Determine the set of parent ids we need to look up.
@@ -879,10 +1003,17 @@ function getModelDelegate(model: ModelName): ModelDelegate {
         err.code = "P2025";
         throw err;
       }
-      // Patch the parent.
+      // Build the Mongo update doc. Mongo rejects mixed operators on
+      // the same field (e.g. $set + $inc on `stock`), but on different
+      // fields they coexist fine. Our prepareUpdateData already
+      // separates them per-field.
+      const mongoUpdate: Record<string, Record<string, unknown>> = {};
+      if (Object.keys(updatePayload.$set).length > 0) mongoUpdate.$set = updatePayload.$set;
+      if (Object.keys(updatePayload.$inc).length > 0) mongoUpdate.$inc = updatePayload.$inc;
+      if (Object.keys(updatePayload.$mul).length > 0) mongoUpdate.$mul = updatePayload.$mul;
       const result = await col.findOneAndUpdate(
         { id: existing.id },
-        { $set: updatePayload.$set },
+        mongoUpdate,
         { returnDocument: "after" },
       );
       const updated = stripMongo(result ?? { ...stripMongo(existing), ...updatePayload.$set });
@@ -906,7 +1037,11 @@ function getModelDelegate(model: ModelName): ModelDelegate {
       const updatePayload = await prepareUpdateData(model, args.data);
       // For updateMany we don't run deferred nested updates — Prisma's
       // updateMany doesn't support nested writes either. Strip them.
-      const result = await col.updateMany(filter, { $set: updatePayload.$set });
+      const mongoUpdate: Record<string, Record<string, unknown>> = {};
+      if (Object.keys(updatePayload.$set).length > 0) mongoUpdate.$set = updatePayload.$set;
+      if (Object.keys(updatePayload.$inc).length > 0) mongoUpdate.$inc = updatePayload.$inc;
+      if (Object.keys(updatePayload.$mul).length > 0) mongoUpdate.$mul = updatePayload.$mul;
+      const result = await col.updateMany(filter, mongoUpdate);
       return { count: result.modifiedCount };
     },
 
@@ -937,7 +1072,13 @@ function getModelDelegate(model: ModelName): ModelDelegate {
       if (existing) {
         if (args.update && Object.keys(args.update).length > 0) {
           const updatePayload = await prepareUpdateData(model, args.update);
-          await col.updateOne({ id: existing.id }, { $set: updatePayload.$set });
+          const mongoUpdate: Record<string, Record<string, unknown>> = {};
+          if (Object.keys(updatePayload.$set).length > 0) mongoUpdate.$set = updatePayload.$set;
+          if (Object.keys(updatePayload.$inc).length > 0) mongoUpdate.$inc = updatePayload.$inc;
+          if (Object.keys(updatePayload.$mul).length > 0) mongoUpdate.$mul = updatePayload.$mul;
+          if (Object.keys(mongoUpdate).length > 0) {
+            await col.updateOne({ id: existing.id }, mongoUpdate);
+          }
           for (const fn of updatePayload.deferred) {
             await fn(existing.id);
           }
@@ -976,6 +1117,37 @@ function projectSelect(doc: any, select: Record<string, boolean>): any {
 
 // ─── Public db object ─────────────────────────────────────────────────────
 
+/**
+ * Interactive transaction. The callback receives a `tx` client that
+ * behaves like the top-level `db` object — same model delegates, same
+ * query syntax.
+ *
+ * Implementation note: MongoDB standalone deployments (Atlas free tier
+ * before 4.0, or any non-replica-set deployment) don't support multi-
+ * document ACID transactions. We don't have a Mongo session here, so
+ * this isn't a true transaction — it runs the callback with the regular
+ * `db` object and lets any thrown error propagate. The caller (e.g.
+ * the rider-accept flow in `/api/rider-jobs/[id]/route.ts`) catches
+ * `ConcurrencyError` itself and reconciles state with an out-of-band
+ * updateMany.
+ *
+ * Why this exists at all: the call sites were written against Prisma's
+ * `$transaction` API and use it for atomicity on single-document
+ * updates (which Mongo *does* guarantee). The `updateMany` calls
+ * inside the callback are atomic per-document; the multi-document
+ * race the rider-accept code defends against is handled by the
+ * `where: { status: "OFFERED" }` clause on the first updateMany.
+ *
+ * If you need true multi-doc ACID, deploy a Mongo replica set and
+ * rewrite this to use `clientSession.withTransaction(...)`.
+ */
+async function $transaction<T>(fn: (tx: any) => Promise<T>): Promise<T> {
+  // We pass the same `db` object as the tx client. Each operation
+  // is atomic at the document level; the caller's `where` clauses
+  // enforce the multi-step invariant.
+  return fn(db);
+}
+
 export const db = {
   get user() { return getModelDelegate("user"); },
   get vendorProfile() { return getModelDelegate("vendorProfile"); },
@@ -991,11 +1163,19 @@ export const db = {
   get wallet() { return getModelDelegate("wallet"); },
   get walletLedgerEntry() { return getModelDelegate("walletLedgerEntry"); },
   get payment() { return getModelDelegate("payment"); },
+  get follow() { return getModelDelegate("follow"); },
+  get notification() { return getModelDelegate("notification"); },
   /** Connect eagerly and verify connectivity. Used by /api/health. */
   async $connect() { await connect(); },
   /** True when a MongoDB connection is currently cached. */
   isConnected(): boolean { return !!globalThis.__mongoCache; },
-} satisfies Record<ModelName, ModelDelegate> & { $connect(): Promise<void>; isConnected(): boolean };
+  /**
+   * Interactive transaction. See the docstring on the private
+   * `$transaction` function above for caveats. Exposed so API routes
+   * written against Prisma's API continue to compile and run.
+   */
+  $transaction,
+};
 
 export type DbClient = typeof db;
 

@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { checkCapability, suspendedMessage, pendingVerificationMessage } from "@/lib/capability";
 
 export async function GET(
   _req: NextRequest,
@@ -78,6 +79,21 @@ export async function PATCH(
 ) {
   try {
     const user = await requireUser();
+    // ⚠ Capability-status enforcement — same gate as POST.
+    const vendorCap = checkCapability(user, "VENDOR");
+    if (!vendorCap.hasCapability) {
+      return NextResponse.json(
+        { error: "You need a vendor store before you can edit products." },
+        { status: 403 },
+      );
+    }
+    if (vendorCap.status === "SUSPENDED") {
+      return NextResponse.json({ error: suspendedMessage("VENDOR") }, { status: 403 });
+    }
+    if (vendorCap.status === "PENDING_VERIFICATION") {
+      return NextResponse.json({ error: pendingVerificationMessage("VENDOR") }, { status: 403 });
+    }
+
     const { id } = await params;
 
     const existing = await db.product.findUnique({ where: { id }, include: { vendor: true } });
@@ -133,6 +149,21 @@ export async function DELETE(
 ) {
   try {
     const user = await requireUser();
+    // ⚠ Capability-status enforcement — same gate as POST/PATCH.
+    const vendorCap = checkCapability(user, "VENDOR");
+    if (!vendorCap.hasCapability) {
+      return NextResponse.json(
+        { error: "You need a vendor store before you can delete products." },
+        { status: 403 },
+      );
+    }
+    if (vendorCap.status === "SUSPENDED") {
+      return NextResponse.json({ error: suspendedMessage("VENDOR") }, { status: 403 });
+    }
+    if (vendorCap.status === "PENDING_VERIFICATION") {
+      return NextResponse.json({ error: pendingVerificationMessage("VENDOR") }, { status: 403 });
+    }
+
     const { id } = await params;
 
     const existing = await db.product.findUnique({ where: { id }, include: { vendor: true } });

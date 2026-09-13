@@ -64,6 +64,27 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: true });
     }
 
+    // Amount re-check (defense in depth, same as the verify route).
+    // If the gateway says a different amount was paid than what we
+    // expected, do NOT mark SUCCESS — the order should not advance.
+    if (payment.amount && verified.amountNaira > 0 && Math.abs(verified.amountNaira - payment.amount) > 1) {
+      console.error(
+        `[payments/webhook] amount mismatch for ${reference}: ` +
+          `gateway=${verified.amountNaira} naira, payment=${payment.amount} naira`,
+      );
+      await db.payment.update({
+        where: { reference },
+        data: {
+          status: "FAILED",
+          providerResponse: JSON.stringify({
+            ...verified,
+            mismatchReason: `amount ${verified.amountNaira} ≠ payment.amount ${payment.amount}`,
+          }),
+        },
+      });
+      return NextResponse.json({ ok: true });
+    }
+
     if (payment.status !== "SUCCESS") {
       await db.payment.update({
         where: { reference },

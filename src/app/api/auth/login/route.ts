@@ -1,8 +1,14 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { verifyPassword, createToken, setSessionCookie } from "@/lib/auth";
+import { enforceRateLimit } from "@/lib/rate-limit";
 
 export async function POST(req: NextRequest) {
+  // Rate limit: 10 login attempts per minute per IP. Protects
+  // against brute-force password attacks.
+  const blocked = enforceRateLimit(req, "login", { limit: 10, windowMs: 60_000 });
+  if (blocked) return blocked;
+
   try {
     const { email, password } = await req.json();
 

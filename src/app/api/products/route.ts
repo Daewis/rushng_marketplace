@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { checkCapability, suspendedMessage, pendingVerificationMessage } from "@/lib/capability";
 
 export async function GET(req: NextRequest) {
   const url = new URL(req.url);
@@ -67,6 +68,25 @@ export async function POST(req: NextRequest) {
         { error: "You need a vendor store before you can add products." },
         { status: 403 },
       );
+    }
+
+    // ⚠ Capability-status enforcement. A vendor whose VENDOR
+    // capability has been SUSPENDED (e.g. by an admin for abuse)
+    // shouldn't be able to keep listing new products. Same for
+    // PENDING_VERIFICATION — although vendors self-activate on
+    // onboarding, an admin could move them to PENDING to gate them.
+    const vendorCap = checkCapability(user, "VENDOR");
+    if (!vendorCap.hasCapability) {
+      return NextResponse.json(
+        { error: "You need a vendor store before you can add products." },
+        { status: 403 },
+      );
+    }
+    if (vendorCap.status === "SUSPENDED") {
+      return NextResponse.json({ error: suspendedMessage("VENDOR") }, { status: 403 });
+    }
+    if (vendorCap.status === "PENDING_VERIFICATION") {
+      return NextResponse.json({ error: pendingVerificationMessage("VENDOR") }, { status: 403 });
     }
 
     const body = await req.json();

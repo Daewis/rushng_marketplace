@@ -11,6 +11,10 @@ export async function GET(req: NextRequest) {
   const vendors = await db.vendorProfile.findMany({
     where,
     orderBy: { rating: "desc" },
+    // Cap page size — previously returned every PUBLIC vendor, growing
+    // unbounded as the marketplace grows. Pagination (skip/cursor) is
+    // a follow-up.
+    take: 50,
   });
 
   const transformed = vendors.map((v) => ({
