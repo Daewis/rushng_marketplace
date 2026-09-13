@@ -91,8 +91,12 @@ const nextConfig: NextConfig = {
       },
       {
         source: "/uploads/:path*",
+        // Legacy rule for when uploads were stored on the filesystem.
+        // Now that uploads go through /api/uploads/:id (GridFS), this
+        // path is unreachable in normal operation. Kept defensively
+        // in case any pre-existing /uploads/<file>.webp URLs are still
+        // embedded in product data — they'll 404 cleanly.
         headers: [
-          // User-uploaded images. Cache hard, never sniff as a script.
           { key: "Cache-Control", value: "public, max-age=31536000, immutable" },
           { key: "X-Content-Type-Options", value: "nosniff" },
           { key: "Content-Security-Policy", value: "default-src 'self'; script-src 'none'" },
