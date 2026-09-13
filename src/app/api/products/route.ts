@@ -106,15 +106,15 @@ export async function POST(req: NextRequest) {
     if (imageList.length === 0) {
       return NextResponse.json({ error: "Add at least one product photo." }, { status: 400 });
     }
-    // Defense-in-depth: image URLs must be either our own /uploads/
-    // paths or an https URL. Rejects javascript:, data:, file:, etc.
-    // even if a malicious caller posts directly to the API bypassing
-    // the UI. /uploads/ paths come from POST /api/uploads which has
-    // already re-encoded the image to WebP.
+    // Defense-in-depth: image URLs must be either our own /api/uploads/
+    // paths (GridFS — current pattern), /uploads/ paths (legacy
+    // filesystem pattern, kept for backward compat), or an https URL.
+    // Rejects javascript:, data:, file:, etc. even if a malicious
+    // caller posts directly to the API bypassing the UI.
     for (const url of imageList) {
-      if (typeof url !== "string" || (!url.startsWith("/uploads/") && !url.startsWith("https://"))) {
+      if (typeof url !== "string" || (!url.startsWith("/api/uploads/") && !url.startsWith("/uploads/") && !url.startsWith("https://"))) {
         return NextResponse.json(
-          { error: "Image URLs must be /uploads/ paths or https:// URLs." },
+          { error: "Image URLs must be /api/uploads/ paths or https:// URLs." },
           { status: 400 },
         );
       }

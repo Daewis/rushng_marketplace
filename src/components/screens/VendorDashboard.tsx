@@ -8,6 +8,7 @@ import { naira } from "@/lib/data";
 import { BackHeader } from "./CartScreen";
 import { ProductFormSheet } from "@/components/vendor/ProductFormSheet";
 import { RiderPickerSheet } from "@/components/vendor/RiderPickerSheet";
+import { StoreSettingsSheet } from "@/components/vendor/StoreSettingsSheet";
 import { getNextStep, isTerminal, canCancel, getStepOwner } from "@/lib/order-status";
 import { ApiError } from "@/lib/api-client";
 import { DataState } from "@/components/shared/DataState";
@@ -32,6 +33,7 @@ export function VendorDashboard() {
   const [productSheetOpen, setProductSheetOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<Product | null>(null);
   const [riderPickerOrder, setRiderPickerOrder] = useState<Order | null>(null);
+  const [settingsOpen, setSettingsOpen] = useState(false);
 
   function openAddProduct() {
     setEditingProduct(null);
@@ -204,7 +206,7 @@ export function VendorDashboard() {
               icon={<Settings className="h-5 w-5" />}
               label="Settings"
               tone="rush-deep"
-              onClick={() => pushToast({ title: "Store settings", description: "Coming soon" })}
+              onClick={() => setSettingsOpen(true)}
             />
           </div>
 
@@ -349,6 +351,11 @@ export function VendorDashboard() {
         onOpenChange={(o) => !o && setRiderPickerOrder(null)}
         onSelect={handleAssignRider}
         assigning={updateOrderStatus.isPending}
+      />
+      <StoreSettingsSheet
+        open={settingsOpen}
+        onOpenChange={setSettingsOpen}
+        slug={vendorProfile.slug}
       />
     </div>
   );

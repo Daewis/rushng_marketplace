@@ -115,13 +115,14 @@ export async function PATCH(
     }
 
     // Defense-in-depth: when images are being updated, each entry must
-    // be either our /uploads/ path or an https URL. Rejects the same
-    // scheme attacks as POST.
+    // be either our /api/uploads/ path (GridFS — current pattern),
+    // a /uploads/ path (legacy filesystem pattern), or an https URL.
+    // Rejects the same scheme attacks as POST.
     if (Array.isArray(images)) {
       for (const url of images) {
-        if (typeof url !== "string" || (!url.startsWith("/uploads/") && !url.startsWith("https://"))) {
+        if (typeof url !== "string" || (!url.startsWith("/api/uploads/") && !url.startsWith("/uploads/") && !url.startsWith("https://"))) {
           return NextResponse.json(
-            { error: "Image URLs must be /uploads/ paths or https:// URLs." },
+            { error: "Image URLs must be /api/uploads/ paths or https:// URLs." },
             { status: 400 },
           );
         }

@@ -75,13 +75,19 @@ export async function PATCH(req: NextRequest) {
       updates.phone = phone.trim() || null;
     }
     if (typeof avatar === "string") {
-      // Accept only relative /uploads/ paths or https URLs. Reject
-      // javascript:/data: schemes that could XSS.
-      if (avatar.startsWith("/uploads/") || avatar.startsWith("https://")) {
+      // Accept /api/uploads/ (GridFS — current pattern) and
+      // /uploads/ (legacy filesystem pattern — kept for backward
+      // compat with any pre-GridFS data). Also accept https:// URLs.
+      // Reject javascript:, data:, file:, etc.
+      if (
+        avatar.startsWith("/api/uploads/") ||
+        avatar.startsWith("/uploads/") ||
+        avatar.startsWith("https://")
+      ) {
         updates.avatar = avatar;
       } else {
         return NextResponse.json(
-          { error: "Avatar must be a /uploads/ URL or an https URL" },
+          { error: "Avatar must be a /api/uploads/ URL or an https URL" },
           { status: 400 },
         );
       }

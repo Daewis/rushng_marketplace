@@ -130,13 +130,16 @@ export async function PATCH(
     for (const f of fields) {
       if (!(f in body)) continue;
       const val = body[f];
-      // For image URLs, accept only /uploads/ or https.
+      // For image URLs, accept both /api/uploads/ (GridFS — current
+      // pattern) and /uploads/ (legacy filesystem pattern, kept for
+      // backward compat). Also accept https:// URLs. Rejects
+      // javascript:, data:, file:, etc.
       if (f === "logo" || f === "coverImage") {
-        if (typeof val === "string" && (val.startsWith("/uploads/") || val.startsWith("https://") || val === "")) {
+        if (typeof val === "string" && (val.startsWith("/api/uploads/") || val.startsWith("/uploads/") || val.startsWith("https://") || val === "")) {
           updates[f] = val;
         } else {
           return NextResponse.json(
-            { error: `${f} must be a /uploads/ URL or an https URL` },
+            { error: `${f} must be a /api/uploads/ URL or an https URL` },
             { status: 400 },
           );
         }
