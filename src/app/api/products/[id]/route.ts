@@ -114,6 +114,20 @@ export async function PATCH(
       }
     }
 
+    // Defense-in-depth: when images are being updated, each entry must
+    // be either our /uploads/ path or an https URL. Rejects the same
+    // scheme attacks as POST.
+    if (Array.isArray(images)) {
+      for (const url of images) {
+        if (typeof url !== "string" || (!url.startsWith("/uploads/") && !url.startsWith("https://"))) {
+          return NextResponse.json(
+            { error: "Image URLs must be /uploads/ paths or https:// URLs." },
+            { status: 400 },
+          );
+        }
+      }
+    }
+
     const updated = await db.product.update({
       where: { id },
       data: {

@@ -16,6 +16,7 @@ import { useCreateProduct, useUpdateProduct } from "@/lib/hooks";
 import { useRush } from "@/lib/store";
 import type { Product } from "@/lib/types";
 import { ApiError } from "@/lib/api-client";
+import { PhotoUploader } from "@/components/shared/PhotoUploader";
 
 interface ProductFormSheetProps {
   open: boolean;
@@ -73,7 +74,9 @@ function ProductForm({
   const [category, setCategory] = useState(product?.category ?? SHOP_CATEGORIES[0].id);
   const [condition, setCondition] = useState<string>(product?.condition ?? "NEW");
   const [stock, setStock] = useState(product ? String(product.stock) : "1");
-  const [imagesText, setImagesText] = useState((product?.images || []).join("\n"));
+  // Images: array of /uploads/<id>.webp URLs (returned by POST /api/uploads).
+  // Seeded from the existing product when editing.
+  const [images, setImages] = useState<string[]>(product?.images ?? []);
   const [error, setError] = useState<string | null>(null);
 
   const saving = createProduct.isPending || updateProduct.isPending;
@@ -82,13 +85,8 @@ function ProductForm({
     e.preventDefault();
     setError(null);
 
-    const images = imagesText
-      .split("\n")
-      .map((s) => s.trim())
-      .filter(Boolean);
-
     if (!name.trim() || !description.trim() || !price || images.length === 0) {
-      setError("Name, description, price, and at least one image URL are required.");
+      setError("Name, description, price, and at least one photo are required.");
       return;
     }
 
@@ -181,14 +179,7 @@ function ProductForm({
         <Input type="number" min="0" value={stock} onChange={(e) => setStock(e.target.value)} />
       </Field>
 
-      <Field label="Image URLs (one per line)">
-        <Textarea
-          value={imagesText}
-          onChange={(e) => setImagesText(e.target.value)}
-          placeholder={"https://example.com/photo1.jpg\nhttps://example.com/photo2.jpg"}
-          rows={3}
-        />
-      </Field>
+      <PhotoUploader value={images} onChange={setImages} maxImages={6} label="Photos" />
 
       {error && <p className="text-xs font-semibold text-destructive">{error}</p>}
 

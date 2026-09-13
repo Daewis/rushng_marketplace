@@ -104,7 +104,20 @@ export async function POST(req: NextRequest) {
     }
     const imageList: string[] = Array.isArray(images) ? images.filter(Boolean) : [];
     if (imageList.length === 0) {
-      return NextResponse.json({ error: "Add at least one product image URL." }, { status: 400 });
+      return NextResponse.json({ error: "Add at least one product photo." }, { status: 400 });
+    }
+    // Defense-in-depth: image URLs must be either our own /uploads/
+    // paths or an https URL. Rejects javascript:, data:, file:, etc.
+    // even if a malicious caller posts directly to the API bypassing
+    // the UI. /uploads/ paths come from POST /api/uploads which has
+    // already re-encoded the image to WebP.
+    for (const url of imageList) {
+      if (typeof url !== "string" || (!url.startsWith("/uploads/") && !url.startsWith("https://"))) {
+        return NextResponse.json(
+          { error: "Image URLs must be /uploads/ paths or https:// URLs." },
+          { status: 400 },
+        );
+      }
     }
 
     const product = await db.product.create({
