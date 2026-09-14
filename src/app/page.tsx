@@ -106,29 +106,60 @@ const PROTECTED: string[] = [
 ];
 
 export default function HomePage() {
-  // Select only the slice of the store we actually use. Without a
-  // selector, useRush() subscribes to the entire store — every cart
-  // update, toast push, search-query change, or auth hydration
-  // would re-render the WHOLE app (and briefly flc the data screens
-  // before TanStack Query's cached data re-resolves). Selecting just
-  // `view` + `user` keeps the re-render surface tight. The toast
-  // subscription lives in the dedicated <Toasts /> component below.
   const view = useRush((s) => s.view);
   const user = useRush((s) => s.user);
-  const { isLoading: meLoading } = useMe();
+  const { isLoading: meLoading, data: meData } = useMe();
 
   // Show auth screen if user tries to access protected route without login
   const isProtected = PROTECTED.includes(view);
   const showAuth = !meLoading && isProtected && !user;
 
-  // Landing gate — first-time visitors who aren't on a protected route
-  // and aren't authenticated see the full-screen LandingScreen hero
-  // instead of the half-empty TopBar + empty HomeScreen combo.
-  const showLanding = !meLoading && !user && !isProtected;
+  // ─── Landing gate with splash screen ─────────────────────────────
+  //
+  // The three possible states:
+  //   1. meLoading = true → we don't know yet if the user is logged in.
+  //      Show a splash screen (logo + spinner) while we wait. This
+  //      prevents the landing page from flashing for logged-in users
+  //      and prevents the app from flashing for logged-out users.
+  //
+  //   2. meLoading = false, user = null → user is NOT logged in.
+  //      Show the landing page.
+  //
+  //   3. meLoading = false, user = <record> → user IS logged in.
+  //      Show the app.
+  //
+  // Previously, during meLoading the app rendered with the app chrome
+  // (TopBar + HomeScreen loading), which caused a visible flash for
+  // logged-out users (app → landing page) and could briefly show the
+  // landing page for logged-in users if the TanStack Query cache was
+  // stale. The splash screen eliminates both flashes.
 
-  // Landing takes over the entire viewport — no TopBar, no BottomNav,
-  // no main scroll container. Toasts still render on top (handled
-  // below, outside this conditional).
+  const showLanding = !meLoading && !user && !isProtected;
+  const showSplash = meLoading && !user; // Only splash if we don't have a cached user yet
+
+  if (showSplash) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center">
+        <AuthHydrator />
+        <div className="animate-pulse">
+          <img
+            src="/rush-logo.jpg"
+            alt="Rush"
+            width={64}
+            height={64}
+            className="rounded-2xl object-cover"
+            style={{ width: 64, height: 64 }}
+            draggable={false}
+          />
+        </div>
+        <div className="mt-4 h-1 w-24 rounded-full bg-rush/20 overflow-hidden">
+          <div className="h-full bg-rush rounded-full animate-[rush-pulse_1.5s_ease-in-out_infinite]" style={{ width: "40%" }} />
+        </div>
+        <Toasts />
+      </div>
+    );
+  }
+
   if (showLanding) {
     return (
       <div className="min-h-screen bg-background flex flex-col">
