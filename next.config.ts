@@ -22,6 +22,12 @@ const withPWA = withPWAInit({
       /^https:\/\/.*\.firebaseapp\.com\/.*/,
       /^https:\/\/js\.paystack\.co\/.*/,
       /^https:\/\/checkout\.paystack\.com\/.*/,
+      // Same-origin Firebase auth handler path. Only relevant if
+      // NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN is ever pointed at this app's
+      // own domain instead of the default *.firebaseapp.com — but
+      // excluding it costs nothing and prevents Workbox from ever
+      // precaching/intercepting the redirect handshake.
+      /\/__\/auth\/.*/,
     ],
   },
 });
