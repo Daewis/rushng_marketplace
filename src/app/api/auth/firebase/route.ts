@@ -209,12 +209,20 @@ export async function POST(req: NextRequest) {
       return err;
     }
 
-    console.error("[auth/firebase POST] error", err);
+    // Log the full error + stack so we can see it in Vercel logs.
+    // The 11ms 500 was previously opaque — now we'll know if it's
+    // a JSON parse error, a missing field, or an SDK init failure.
+    console.error("[auth/firebase POST] error:", err?.message ?? err);
+    console.error("[auth/firebase POST] stack:", err?.stack);
+    console.error("[auth/firebase POST] FIREBASE_SERVICE_ACCOUNT set:",
+      Boolean(process.env.FIREBASE_SERVICE_ACCOUNT));
+    console.error("[auth/firebase POST] FIREBASE_SERVICE_ACCOUNT length:",
+      process.env.FIREBASE_SERVICE_ACCOUNT?.length ?? 0);
 
     return NextResponse.json(
       {
         error:
-          err.message ||
+          err?.message ||
           "Failed to authenticate with Firebase",
       },
       {
