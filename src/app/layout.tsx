@@ -4,6 +4,7 @@ import "./globals.css";
 import { Toaster } from "@/components/ui/toaster";
 import { QueryProvider } from "@/components/QueryProvider";
 import { AmbientBackground } from "@/components/AmbientBackground";
+import { AppErrorBoundary } from "@/components/AppErrorBoundary";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -63,7 +64,9 @@ export default function RootLayout({
         className={`${geistSans.variable} ${geistMono.variable} antialiased bg-background text-foreground`}
       >
         <AmbientBackground />
-        <QueryProvider>{children}</QueryProvider>
+        <AppErrorBoundary>
+          <QueryProvider>{children}</QueryProvider>
+        </AppErrorBoundary>
         <Toaster />
       </body>
     </html>

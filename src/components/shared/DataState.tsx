@@ -16,6 +16,21 @@ import { Loader2, AlertCircle, RefreshCw, PackageOpen } from "lucide-react";
  *     {actual data rendering}
  *   </DataState>
  *
+ * State precedence:
+ *   1. LOADING (isLoading) → shows spinner
+ *   2. ERROR (error is truthy) → shows error + retry
+ *   3. EMPTY (isEmpty) → shows empty state
+ *   4. SUCCESS → renders children
+ *
+ * IMPORTANT for stale-while-revalidate: the CALLER controls whether
+ * `error` is truthy. If the caller wants to keep showing stale data
+ * during a background refetch failure, it should pass `error={null}`
+ * (or a falsy value) when it still has data. See HomeScreen for the
+ * pattern:
+ *
+ *   const hasAnyData = !!(productsQ.data || storesQ.data || ...);
+ *   const error = !hasAnyData && allErrored ? ... : null;
+ *
  * Why this matters:
  *   - LOADING shows a skeleton/spinner — never fake data.
  *   - SUCCESS renders children with real data.

@@ -31,9 +31,24 @@ export const HomeScreen = memo(function HomeScreen() {
   const topVendors = (storesQ.data?.vendors || []).filter((v) => v.visibility === "PUBLIC").slice(0, 4);
   const topProviders = (providersQ.data?.providers || []).slice(0, 2);
 
-  // Surface an error from any of the three queries — first one wins.
-  const error = productsQ.error || storesQ.error || providersQ.error;
-  const loading = productsQ.isLoading || storesQ.isLoading;
+  // ─── Stale-while-revalidate error handling ────────────────────────
+  // Previously: `const error = productsQ.error || storesQ.error || ...`
+  // This tripped the error state even when cached data was still
+  // available — a background refetch that failed (Vercel cold start,
+  // transient network blip) would set `error` on the query object
+  // but `data` was still there. The homepage would switch to
+  // "Something went wrong" even though it could show real data.
+  //
+  // Now: only show the error state if we have NO data from ANY of
+  // the three queries. If at least one has data, we render what we
+  // have. A failed background refetch is silent — the user keeps
+  // seeing the last good data.
+  const hasAnyData = !!(productsQ.data || storesQ.data || providersQ.data);
+  const allErrored = !!(productsQ.error && storesQ.error && providersQ.error);
+  const error = !hasAnyData && allErrored
+    ? (productsQ.error || storesQ.error || providersQ.error)
+    : null;
+  const loading = (productsQ.isLoading || storesQ.isLoading) && !hasAnyData;
   const isEmpty = !loading && !error && popularProducts.length === 0 && topVendors.length === 0 && topProviders.length === 0;
 
   return (
