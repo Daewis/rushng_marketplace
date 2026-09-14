@@ -7,7 +7,6 @@ const withPWA = withPWAInit({
   register: true,
   workboxOptions: {
     disableDevLogs: true,
-    // Exclude Google Auth, Firebase, and Paystack endpoints from Service Worker caching
     exclude: [
       /^https:\/\/apis\.google\.com\/.*/,
       /^https:\/\/.*\.googleapis\.com\/.*/,
@@ -17,6 +16,7 @@ const withPWA = withPWAInit({
       /^https:\/\/js\.paystack\.co\/.*/,
       /^https:\/\/checkout\.paystack\.com\/.*/,
       /\/__\/auth\/.*/,
+      /\/__\/firebase\/.*/,
     ],
   },
 });
@@ -40,9 +40,7 @@ const nextConfig: NextConfig = {
           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
           "font-src 'self' https://fonts.gstatic.com",
           "img-src 'self' data: https: blob:",
-          // Added securetoken.googleapis.com and accounts.google.com
           "connect-src 'self' https://*.googleapis.com https://apis.google.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://accounts.google.com wss://*.firebaseio.com https://api.paystack.co",
-          // Added accounts.google.com
           "frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://js.paystack.co https://checkout.paystack.com",
           "frame-ancestors 'self'",
           "form-action 'self'",
@@ -50,8 +48,8 @@ const nextConfig: NextConfig = {
           "object-src 'none'",
         ].join("; "),
       },
-      // Allows the Firebase popup window to communicate back to your app
-      { key: "Cross-Origin-Opener-Policy", value: "same-origin-allow-popups" },
+      // Set to unsafe-none to allow Firebase popup window.closed lifecycle polling
+      { key: "Cross-Origin-Opener-Policy", value: "unsafe-none" },
       { key: "X-Frame-Options", value: "DENY" },
       { key: "X-Content-Type-Options", value: "nosniff" },
       { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
