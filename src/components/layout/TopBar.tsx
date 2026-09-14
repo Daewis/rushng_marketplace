@@ -58,12 +58,7 @@ export function TopBar({ hideSearch = false }: { hideSearch?: boolean }) {
     <header className="sticky top-0 z-30 bg-background/95 backdrop-blur-md border-b border-border">
       <div className={`mx-auto ${CONTENT_WIDTH} px-4 pt-3 pb-2.5`}>
         <div className="flex items-center justify-between mb-2.5">
-          <button
-            onClick={() => navigate("home")}
-            className="flex items-center gap-2 group"
-          >
-            <RushLogo size={32} withWordmark wordmarkClass="text-lg" />
-          </button>
+          <RushLogo size={40} />
 
           <div className="flex items-center gap-1.5">
             <div className="relative" ref={bellRef}>

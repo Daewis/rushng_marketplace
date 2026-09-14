@@ -49,7 +49,7 @@ export function LandingScreen() {
       <div className="relative flex flex-col items-center px-6 pt-16 pb-10 text-center min-h-screen justify-center">
         {/* Big logo with fade-in */}
         <div className="animate-in fade-in zoom-in-50 duration-700 mb-6">
-          <RushLogo size={88} />
+          <RushLogo size={88} clickable={false} />
         </div>
 
         {/* Title */}

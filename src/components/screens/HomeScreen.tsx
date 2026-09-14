@@ -1,26 +1,15 @@
 "use client";
 
 import { memo } from "react";
-import { ShoppingBag, Wrench, Car, ChevronRight, Store, Sparkle, Star } from "lucide-react";
+import { ShoppingBag, Wrench, Car, ChevronRight, Store, Sparkles, Star, Zap, TrendingUp } from "lucide-react";
 import { useRush } from "@/lib/store";
 import { useProducts, useStores, useProviders } from "@/lib/hooks";
 import { naira } from "@/lib/data";
 import { SectionHeader, ProductCard, VendorCard, EmptyState } from "@/components/shared/Cards";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { NameAvatar } from "@/components/NameAvatar";
 import { DataState } from "@/components/shared/DataState";
 
-/**
- * HomeScreen — wrapped in React.memo so it doesn't re-render when
- * the parent (HomePage) re-renders for reasons unrelated to this
- * screen (e.g. auth hydration flipping `user` from null → record,
- * toasts pushing, cart updates). The only props are zero, so the
- * default shallow comparison is sufficient — re-renders now happen
- * only when this screen's own TanStack Query data changes.
- */
 export const HomeScreen = memo(function HomeScreen() {
-  // Select only the slice we use — without a selector, useRush()
-  // subscribes to the entire store and re-renders on every cart /
-  // toast / search update.
   const user = useRush((s) => s.user);
   const navigate = useRush((s) => s.navigate);
   const productsQ = useProducts();
@@ -31,18 +20,6 @@ export const HomeScreen = memo(function HomeScreen() {
   const topVendors = (storesQ.data?.vendors || []).filter((v) => v.visibility === "PUBLIC").slice(0, 4);
   const topProviders = (providersQ.data?.providers || []).slice(0, 2);
 
-  // ─── Stale-while-revalidate error handling ────────────────────────
-  // Previously: `const error = productsQ.error || storesQ.error || ...`
-  // This tripped the error state even when cached data was still
-  // available — a background refetch that failed (Vercel cold start,
-  // transient network blip) would set `error` on the query object
-  // but `data` was still there. The homepage would switch to
-  // "Something went wrong" even though it could show real data.
-  //
-  // Now: only show the error state if we have NO data from ANY of
-  // the three queries. If at least one has data, we render what we
-  // have. A failed background refetch is silent — the user keeps
-  // seeing the last good data.
   const hasAnyData = !!(productsQ.data || storesQ.data || providersQ.data);
   const allErrored = !!(productsQ.error && storesQ.error && providersQ.error);
   const error = !hasAnyData && allErrored
@@ -53,57 +30,63 @@ export const HomeScreen = memo(function HomeScreen() {
 
   return (
     <div className="pb-6">
-      {/* Greeting */}
-      <div className="px-4 pt-3 pb-1">
-        <p className="text-xs text-ink-soft">
-          Hello{user ? `, ${user.name.split(" ")[0]}` : ""} 👋
-        </p>
-        <h1 className="text-xl font-extrabold text-ink tracking-tight mt-0.5">
-          What do you need today?
-        </h1>
-      </div>
+      {/* ─── Gradient greeting header ─────────────────────────────── */}
+      <div className="px-4 pt-4 pb-3">
+        <div className="flex items-center gap-3 mb-3">
+          {user?.avatar ? (
+            // eslint-disable-next-line @next/next/no-img-element
+            <img src={user.avatar} alt={user.name} className="h-10 w-10 rounded-full object-cover ring-2 ring-rush/20" />
+          ) : (
+            <NameAvatar name={user?.name || "?"} size={40} />
+          )}
+          <div>
+            <p className="text-xs text-ink-soft">Hey{user ? `, ${user.name.split(" ")[0]}` : ""} 👋</p>
+            <h1 className="text-lg font-extrabold text-ink tracking-tight">
+              What's the move?
+            </h1>
+          </div>
+        </div>
 
-      {/* 3 primary actions */}
-      <div className="px-4 pt-3">
-        <div className="grid grid-cols-3 gap-2.5">
-          <PrimaryAction
+        {/* 3 primary action tiles — bolder, gradient-backed */}
+        <div className="grid grid-cols-3 gap-2">
+          <ActionTile
+            emoji="🛍️"
             label="Shop"
-            sublabel="Buy things"
-            icon={<ShoppingBag className="h-5 w-5" />}
-            tone="rush"
+            sub="Buy things"
+            gradient="from-rush to-rush-deep"
             onClick={() => navigate("shop")}
           />
-          <PrimaryAction
+          <ActionTile
+            emoji="🔧"
             label="Services"
-            sublabel="Hire pros"
-            icon={<Wrench className="h-5 w-5" />}
-            tone="ink"
+            sub="Hire pros"
+            gradient="from-ink to-ink-soft"
             onClick={() => navigate("services")}
           />
-          <PrimaryAction
+          <ActionTile
+            emoji="🚗"
             label="Rides"
-            sublabel="Get around"
-            icon={<Car className="h-5 w-5" />}
-            tone="rush-deep"
+            sub="Get around"
+            gradient="from-rush-deep to-ink"
             onClick={() => navigate("ride")}
           />
         </div>
       </div>
 
-      {/* Promo banner */}
-      <div className="px-4 pt-4">
+      {/* Promo banner — flashier */}
+      <div className="px-4 pt-3">
         <div className="rush-gradient rounded-2xl p-4 text-white shadow-rush relative overflow-hidden">
-          <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-white/10" />
-          <div className="absolute -right-2 -bottom-8 h-20 w-20 rounded-full bg-white/10" />
+          <div className="absolute -right-6 -top-6 h-28 w-28 rounded-full bg-white/10" />
+          <div className="absolute -right-2 -bottom-10 h-24 w-24 rounded-full bg-white/10" />
           <div className="relative">
             <div className="flex items-center gap-1.5 mb-1">
-              <Sparkle className="h-3.5 w-3.5" />
-              <span className="text-[11px] font-semibold uppercase tracking-wider opacity-90">
+              <Sparkles className="h-3.5 w-3.5" />
+              <span className="text-[11px] font-bold uppercase tracking-wider opacity-90">
                 New on Rush
               </span>
             </div>
-            <p className="text-base font-bold leading-tight">
-              Open your store in 5 minutes
+            <p className="text-base font-extrabold leading-tight">
+              Open your store in 5 minutes ⚡
             </p>
             <p className="text-xs opacity-90 mt-0.5 mb-3 max-w-[15rem]">
               Sell to thousands of buyers across Lagos. Free to start.
@@ -136,11 +119,18 @@ export const HomeScreen = memo(function HomeScreen() {
           {/* Popular near you */}
           {popularProducts.length > 0 && (
             <section className="px-4 pt-6">
-              <SectionHeader
-                title="Popular near you"
-                action="See all"
-                onAction={() => navigate("shop")}
-              />
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-extrabold text-ink flex items-center gap-1.5">
+                  <TrendingUp className="h-4 w-4 text-rush" />
+                  Popular near you
+                </h2>
+                <button
+                  onClick={() => navigate("shop")}
+                  className="text-xs font-bold text-rush hover:text-rush-deep"
+                >
+                  See all →
+                </button>
+              </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-x-3 gap-y-4">
                 {popularProducts.map((p) => (
                   <ProductCard key={p.id} product={p} />
@@ -152,11 +142,18 @@ export const HomeScreen = memo(function HomeScreen() {
           {/* Top stores */}
           {topVendors.length > 0 && (
             <section className="px-4 pt-7">
-              <SectionHeader
-                title="Top stores"
-                action="Browse stores"
-                onAction={() => navigate("explore")}
-              />
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-extrabold text-ink flex items-center gap-1.5">
+                  <Store className="h-4 w-4 text-rush" />
+                  Top stores
+                </h2>
+                <button
+                  onClick={() => navigate("explore")}
+                  className="text-xs font-bold text-rush hover:text-rush-deep"
+                >
+                  Browse →
+                </button>
+              </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-3">
                 {topVendors.map((v) => (
                   <VendorCard key={v.id} vendor={v} />
@@ -168,29 +165,38 @@ export const HomeScreen = memo(function HomeScreen() {
           {/* Recommended providers */}
           {topProviders.length > 0 && (
             <section className="px-4 pt-7">
-              <SectionHeader
-                title="Service providers"
-                action="See all"
-                onAction={() => navigate("services")}
-              />
+              <div className="flex items-center justify-between mb-3">
+                <h2 className="text-sm font-extrabold text-ink flex items-center gap-1.5">
+                  <Wrench className="h-4 w-4 text-rush" />
+                  Service providers
+                </h2>
+                <button
+                  onClick={() => navigate("services")}
+                  className="text-xs font-bold text-rush hover:text-rush-deep"
+                >
+                  See all →
+                </button>
+              </div>
               <div className="space-y-2.5">
                 {topProviders.map((p) => (
                   <button
                     key={p.id}
                     onClick={() => navigate("provider", { providerId: p.slug })}
-                    className="w-full flex items-center gap-3 p-3 rounded-2xl bg-card border border-border shadow-card text-left hover:shadow-md transition-shadow"
+                    className="w-full flex items-center gap-3 p-3 rounded-2xl bg-card border border-border shadow-card text-left hover:shadow-md hover:border-rush/30 transition-all"
                   >
-                    <Avatar className="h-14 w-14 rounded-xl">
-                      {p.avatar && <AvatarImage src={p.avatar} alt={p.businessName} />}
-                      <AvatarFallback>{p.businessName[0]}</AvatarFallback>
-                    </Avatar>
+                    {p.avatar ? (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={p.avatar} alt={p.businessName} className="h-14 w-14 rounded-xl object-cover" />
+                    ) : (
+                      <NameAvatar name={p.businessName} size={56} shape="square" />
+                    )}
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-bold text-ink line-clamp-1">
                         {p.businessName}
                       </p>
                       <p className="text-[11px] text-ink-soft line-clamp-1">{p.tagline}</p>
                       <div className="flex items-center gap-2 mt-1 text-[11px]">
-                        <span className="flex items-center gap-0.5 font-semibold text-ink">
+                        <span className="flex items-center gap-0.5 font-bold text-ink">
                           <Star className="h-3 w-3 fill-warning text-warning" />
                           {p.rating}
                         </span>
@@ -211,10 +217,10 @@ export const HomeScreen = memo(function HomeScreen() {
       <section className="px-4 pt-7">
         <button
           onClick={() => navigate("onboarding-rider")}
-          className="w-full flex items-center gap-3 p-4 rounded-2xl bg-ink text-white text-left"
+          className="w-full flex items-center gap-3 p-4 rounded-2xl bg-ink text-white text-left hover:scale-[1.01] active:scale-[0.99] transition-transform"
         >
-          <div className="h-10 w-10 rounded-xl bg-white/10 flex items-center justify-center">
-            <Car className="h-5 w-5 text-rush" />
+          <div className="h-10 w-10 rounded-xl bg-rush/20 flex items-center justify-center text-2xl">
+            🏍️
           </div>
           <div className="flex-1">
             <p className="text-sm font-bold">Earn with your bike or car</p>
@@ -235,36 +241,29 @@ export const HomeScreen = memo(function HomeScreen() {
   );
 });
 
-function PrimaryAction({
+// ─── Action tile — emoji + gradient, gen-Z vibe ──────────────────────
+function ActionTile({
+  emoji,
   label,
-  sublabel,
-  icon,
-  tone,
+  sub,
+  gradient,
   onClick,
 }: {
+  emoji: string;
   label: string;
-  sublabel: string;
-  icon: React.ReactNode;
-  tone: "rush" | "ink" | "rush-deep";
+  sub: string;
+  gradient: string;
   onClick: () => void;
 }) {
-  const toneCls = {
-    rush: "rush-gradient text-white shadow-rush",
-    ink: "bg-ink text-white",
-    "rush-deep": "bg-rush-deep text-white",
-  }[tone];
-
   return (
     <button
       onClick={onClick}
-      className={`flex flex-col items-start gap-2 p-3 rounded-2xl ${toneCls} hover:scale-[1.02] active:scale-[0.98] transition-transform`}
+      className={`flex flex-col items-start gap-1.5 p-2.5 rounded-2xl bg-gradient-to-br ${gradient} text-white shadow-md hover:scale-[1.03] active:scale-[0.97] transition-transform`}
     >
-      <div className="h-9 w-9 rounded-lg bg-white/15 flex items-center justify-center">
-        {icon}
-      </div>
+      <span className="text-xl leading-none">{emoji}</span>
       <div className="leading-tight">
-        <p className="text-sm font-bold">{label}</p>
-        <p className="text-[10px] opacity-85">{sublabel}</p>
+        <p className="text-xs font-extrabold">{label}</p>
+        <p className="text-[9px] opacity-80">{sub}</p>
       </div>
     </button>
   );

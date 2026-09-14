@@ -56,7 +56,7 @@ export function AccountScreen() {
   if (!user) {
     return (
       <div className="px-4 pt-16 pb-6 text-center">
-        <RushLogo size={64} className="mx-auto mb-4" />
+        <RushLogo size={64} clickable={false} className="mx-auto mb-4" />
         <h1 className="text-xl font-extrabold text-ink">Sign in to Rush</h1>
         <p className="text-sm text-ink-soft mt-1 mb-5">
           One account to shop, sell, offer services, and ride.
