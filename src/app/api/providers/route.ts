@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { safeJsonParse } from "@/lib/safe-json";
 
 export async function GET(req: NextRequest) {
   try {
@@ -39,7 +40,11 @@ export async function GET(req: NextRequest) {
       responseTimeMin: p.responseTimeMin,
       verified: p.verified,
       completedJobs: p.completedJobs,
-      portfolio: JSON.parse(p.portfolio),
+      // safeJsonParse — `portfolio` may be undefined/null/malformed
+      // for legacy rows. Previously `JSON.parse(p.portfolio)` would
+      // throw synchronously inside this .map() and 500 the whole
+      // list. Now one bad row returns [] and the rest render fine.
+      portfolio: safeJsonParse<string[]>(p.portfolio, []),
       services: p.services.map((s) => ({
         id: s.id,
         name: s.name,
@@ -51,7 +56,6 @@ export async function GET(req: NextRequest) {
 
     return NextResponse.json({ providers: transformed });
   } catch (err: any) {
-    // Public read endpoint — must never 500 with a stack trace.
     console.error("[providers GET] error", err?.message ?? err);
     return NextResponse.json(
       { error: "Failed to load providers", details: err?.message },

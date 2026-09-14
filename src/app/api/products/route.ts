@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
 import { checkCapability, suspendedMessage, pendingVerificationMessage } from "@/lib/capability";
+import { safeJsonParse } from "@/lib/safe-json";
 
 export async function GET(req: NextRequest) {
   try {
@@ -32,7 +33,9 @@ export async function GET(req: NextRequest) {
       take: 50,
     });
 
-    // Transform to UI shape (parse JSON fields)
+    // Transform to UI shape. Use safeJsonParse for JSON-string fields
+    // (images, tags) — one bad row previously crashed the whole list
+    // because JSON.parse(undefined) throws synchronously inside .map().
     const transformed = products.map((p) => ({
       id: p.id,
       vendorId: p.vendorId,
@@ -42,7 +45,7 @@ export async function GET(req: NextRequest) {
       description: p.description,
       price: p.price,
       compareAtPrice: p.compareAtPrice ?? undefined,
-      images: JSON.parse(p.images),
+      images: safeJsonParse<string[]>(p.images, []),
       category: p.category,
       condition: p.condition ?? undefined,
       stock: p.stock,
@@ -50,7 +53,7 @@ export async function GET(req: NextRequest) {
       reviewCount: p.reviewCount,
       location: p.location,
       createdAt: p.createdAt.toISOString(),
-      tags: JSON.parse(p.tags),
+      tags: safeJsonParse<string[]>(p.tags, []),
     }));
 
     return NextResponse.json({ products: transformed });

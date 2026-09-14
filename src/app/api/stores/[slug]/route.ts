@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { requireUser } from "@/lib/auth";
+import { safeJsonParse } from "@/lib/safe-json";
 
 export async function GET(
   _req: NextRequest,
@@ -38,7 +39,7 @@ export async function GET(
     description: p.description,
     price: p.price,
     compareAtPrice: p.compareAtPrice ?? undefined,
-    images: JSON.parse(p.images),
+    images: safeJsonParse<string[]>(p.images, []),
     category: p.category,
     condition: p.condition ?? undefined,
     stock: p.stock,
@@ -46,7 +47,7 @@ export async function GET(
     reviewCount: p.reviewCount,
     location: p.location,
     createdAt: p.createdAt.toISOString(),
-    tags: JSON.parse(p.tags),
+    tags: safeJsonParse<string[]>(p.tags, []),
   }));
 
   return NextResponse.json({

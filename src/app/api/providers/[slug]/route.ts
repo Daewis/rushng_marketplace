@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
+import { safeJsonParse } from "@/lib/safe-json";
 
 export async function GET(
   _req: NextRequest,
@@ -33,7 +34,7 @@ export async function GET(
       responseTimeMin: provider.responseTimeMin,
       verified: provider.verified,
       completedJobs: provider.completedJobs,
-      portfolio: JSON.parse(provider.portfolio),
+      portfolio: safeJsonParse<string[]>(provider.portfolio, []),
       services: provider.services.map((s) => ({
         id: s.id,
         name: s.name,
