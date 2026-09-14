@@ -1,5 +1,6 @@
 "use client";
 
+import { memo } from "react";
 import { ShoppingBag, Wrench, Car, ChevronRight, Store, Sparkle, Star } from "lucide-react";
 import { useRush } from "@/lib/store";
 import { useProducts, useStores, useProviders } from "@/lib/hooks";
@@ -8,8 +9,20 @@ import { SectionHeader, ProductCard, VendorCard, EmptyState } from "@/components
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { DataState } from "@/components/shared/DataState";
 
-export function HomeScreen() {
-  const { user, navigate } = useRush();
+/**
+ * HomeScreen — wrapped in React.memo so it doesn't re-render when
+ * the parent (HomePage) re-renders for reasons unrelated to this
+ * screen (e.g. auth hydration flipping `user` from null → record,
+ * toasts pushing, cart updates). The only props are zero, so the
+ * default shallow comparison is sufficient — re-renders now happen
+ * only when this screen's own TanStack Query data changes.
+ */
+export const HomeScreen = memo(function HomeScreen() {
+  // Select only the slice we use — without a selector, useRush()
+  // subscribes to the entire store and re-renders on every cart /
+  // toast / search update.
+  const user = useRush((s) => s.user);
+  const navigate = useRush((s) => s.navigate);
   const productsQ = useProducts();
   const storesQ = useStores();
   const providersQ = useProviders();
@@ -205,7 +218,7 @@ export function HomeScreen() {
       </div>
     </div>
   );
-}
+});
 
 function PrimaryAction({
   label,

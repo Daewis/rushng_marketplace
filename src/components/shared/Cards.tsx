@@ -34,26 +34,43 @@ export function SectionHeader({
 // ---------- Product Card (Jiji-style minimal) ----------
 export function ProductCard({ product }: { product: Product }) {
   const { navigate } = useRush();
+  // Defensive guards: if `product` is briefly undefined during a
+  // re-render (e.g. when AuthHydrator flips the user from null →
+  // record and the parent re-renders before TanStack Query re-resolves
+  // the cached data), don't crash the whole tree. Return null and
+  // let the next render with real data paint.
+  if (!product || !product.images || !Array.isArray(product.images)) {
+    return null;
+  }
+  // Defensive: stock may be undefined for legacy rows.
+  const stock = typeof product.stock === "number" ? product.stock : 0;
+  const primaryImage = product.images[0] || "";
   return (
     <button
       onClick={() => navigate("product", { productId: product.id })}
       className="flex flex-col text-left group"
     >
       <div className="relative aspect-square rounded-xl overflow-hidden bg-muted">
-        <img
-          src={product.images[0]}
-          alt={product.name}
-          loading="lazy"
-          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-        />
-        {product.compareAtPrice && (
+        {primaryImage ? (
+          <img
+            src={primaryImage}
+            alt={product.name}
+            loading="lazy"
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+          />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center text-ink-soft text-[10px]">
+            No image
+          </div>
+        )}
+        {product.compareAtPrice && product.compareAtPrice > 0 && (
           <span className="absolute top-1.5 left-1.5 bg-rush text-white text-[10px] font-bold px-1.5 py-0.5 rounded-md">
             -{Math.round((1 - product.price / product.compareAtPrice) * 100)}%
           </span>
         )}
-        {product.stock <= 4 && (
+        {stock > 0 && stock <= 4 && (
           <span className="absolute bottom-1.5 left-1.5 bg-ink/80 text-white text-[10px] font-semibold px-1.5 py-0.5 rounded-md backdrop-blur-sm">
-            Only {product.stock} left
+            Only {stock} left
           </span>
         )}
       </div>
@@ -86,23 +103,30 @@ export function ProductCard({ product }: { product: Product }) {
 // ---------- Vendor store card ----------
 export function VendorCard({ vendor }: { vendor: VendorProfile }) {
   const { navigate } = useRush();
+  // Same defensive guard as ProductCard — don't crash on brief
+  // undefined during re-renders.
+  if (!vendor || !vendor.businessName) return null;
   return (
     <button
       onClick={() => navigate("store", { storeSlug: vendor.slug })}
       className="flex flex-col text-left rounded-2xl overflow-hidden bg-card border border-border shadow-card group"
     >
       <div className="relative h-24 bg-muted">
-        <img
-          src={vendor.coverImage}
-          alt={vendor.businessName}
-          loading="lazy"
-          className="w-full h-full object-cover"
-        />
+        {vendor.coverImage ? (
+          <img
+            src={vendor.coverImage}
+            alt={vendor.businessName}
+            loading="lazy"
+            className="w-full h-full object-cover"
+          />
+        ) : null}
         <div className="absolute inset-0 bg-gradient-to-t from-ink/40 to-transparent" />
       </div>
       <div className="p-3 -mt-7 relative">
         <div className="h-12 w-12 rounded-xl overflow-hidden border-2 border-background bg-muted">
-          <img src={vendor.logo} alt={vendor.businessName} className="w-full h-full object-cover" />
+          {vendor.logo ? (
+            <img src={vendor.logo} alt={vendor.businessName} className="w-full h-full object-cover" />
+          ) : null}
         </div>
         <p className="text-sm font-bold text-ink mt-2 line-clamp-1">
           {vendor.businessName}

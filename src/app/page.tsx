@@ -105,7 +105,17 @@ const PROTECTED: string[] = [
 ];
 
 export default function HomePage() {
-  const { view, toasts, dismissToast, navigate, user } = useRush();
+  // Select only the slice of the store we actually use. Without a
+  // selector, useRush() subscribes to the entire store — every cart
+  // update, toast push, search-query change, or auth hydration
+  // would re-render the WHOLE app (and briefly flc the data screens
+  // before TanStack Query's cached data re-resolves). Selecting
+  // just `view` + `user` + `toasts` + the actions we need keeps
+  // the re-render surface tight.
+  const view = useRush((s) => s.view);
+  const user = useRush((s) => s.user);
+  const toasts = useRush((s) => s.toasts);
+  const dismissToast = useRush((s) => s.dismissToast);
   const { isLoading: meLoading } = useMe();
 
   // Show auth screen if user tries to access protected route without login
@@ -158,10 +168,10 @@ export default function HomePage() {
 }
 
 function ViewRouter() {
-  const { view, navigate, user } = useRush();
-
-  // For protected views, if not logged in, fall through to auth screen
-  // (handled in parent)
+  // Select only `view` — this component is just a switch. Selecting
+  // the whole store would re-render the active screen on every store
+  // update (cart, toasts, auth hydration) for no reason.
+  const view = useRush((s) => s.view);
 
   switch (view) {
     case "home":
