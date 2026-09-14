@@ -27,7 +27,6 @@ const withPWA = withPWAInit({
 });
 
 const nextConfig: NextConfig = {
-  transpilePackages: ['jwks-rsa', 'jose'],
   output: "standalone",
   // Strict: TypeScript errors must fail the build. Previously this was
   // `ignoreBuildErrors: true`, which silently shipped real runtime bugs
@@ -40,6 +39,12 @@ const nextConfig: NextConfig = {
   // Surface effect bugs (stale deps, double-fires) in development.
   reactStrictMode: true,
   allowedDevOrigins: ["127.0.0.1", "localhost", "*.space-z.ai"],
+  // Keep firebase-admin + its ESM-only transitive deps as external
+  // packages — don't let webpack bundle them. Without this, `jwks-rsa`
+  // (a transitive dep of `firebase-admin`) tries to `require()` `jose`
+  // (ESM-only) inside the serverless CommonJS bundle, throwing
+  // ERR_REQUIRE_ESM and 500'ing the Firebase auth route.
+  serverExternalPackages: ['firebase-admin', 'jwks-rsa', 'jose'],
   // Next.js 16 enables Turbopack by default, but @ducanh2912/next-pwa
   // injects a webpack config. Silence the "no turbopack config" warning
   // by setting an empty turbopack config; the PWA plugin's webpack
