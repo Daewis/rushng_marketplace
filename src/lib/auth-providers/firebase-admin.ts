@@ -1,17 +1,3 @@
-/**
- * Firebase Admin SDK initialization (server-side only).
- *
- * Used to verify the ID tokens issued by the Firebase client SDK so
- * the backend can trust that the user is who they say they are.
- *
- * Reads `FIREBASE_SERVICE_ACCOUNT` env var — paste the entire JSON
- * from Firebase Console → Project settings → Service accounts →
- * Generate new private key. When the env var is empty, this module
- * exports `isFirebaseAdminConfigured = false` and `verifyIdToken`
- * throws — the caller is expected to handle the "Firebase not
- * configured" case by falling back to the legacy email/password flow.
- */
-
 import "server-only";
 
 export const isFirebaseAdminConfigured: boolean = Boolean(
@@ -40,28 +26,39 @@ async function getAdminApp() {
 
   let serviceAccount: any;
   try {
-    // Accept either raw JSON or a stringified JSON (single line).
-    // Vercel's env var UI sometimes wraps the JSON in extra quotes
-    // or adds whitespace — trim + strip outer quotes before parsing.
     const raw = process.env.FIREBASE_SERVICE_ACCOUNT;
     if (typeof raw !== "string") {
       throw new Error("FIREBASE_SERVICE_ACCOUNT is not a string.");
     }
     let cleaned = raw.trim();
-    // Strip surrounding quotes if Vercel added them.
+
+    // Strip surrounding wrapping quotes if Vercel added them
     if (
       (cleaned.startsWith('"') && cleaned.endsWith('"')) ||
       (cleaned.startsWith("'") && cleaned.endsWith("'"))
     ) {
       cleaned = cleaned.slice(1, -1);
     }
-    // Unescape any literal \n sequences in the private key field —
-    // Vercel's env var editor sometimes stores them as literal
-    // backslash-n instead of actual newlines.
-    if (cleaned.includes("\\n")) {
-      cleaned = cleaned.replace(/\\n/g, "\n");
+
+    // Support Base64 encoded service accounts (common best-practice fallback)
+    if (!cleaned.startsWith("{") && !cleaned.endsWith("}")) {
+      try {
+        const decoded = Buffer.from(cleaned, "base64").toString("utf-8");
+        if (decoded.trim().startsWith("{")) {
+          cleaned = decoded.trim();
+        }
+      } catch {
+        // Not base64, proceed with original string
+      }
     }
+
+    // Parse JSON directly without replacing \n with raw control characters
     serviceAccount = JSON.parse(cleaned);
+
+    // Normalize newlines ONLY on the private_key field after parsing
+    if (typeof serviceAccount.private_key === "string") {
+      serviceAccount.private_key = serviceAccount.private_key.replace(/\\n/g, "\n");
+    }
   } catch (e: any) {
     initError =
       "FIREBASE_SERVICE_ACCOUNT is set but isn't valid JSON. " +
@@ -71,7 +68,11 @@ async function getAdminApp() {
   }
 
   // Validate the service account has the required fields.
-  if (!serviceAccount.project_id || !serviceAccount.private_key || !serviceAccount.client_email) {
+  if (
+    !serviceAccount.project_id ||
+    !serviceAccount.private_key ||
+    !serviceAccount.client_email
+  ) {
     initError =
       "FIREBASE_SERVICE_ACCOUNT JSON is missing required fields " +
       "(project_id, private_key, client_email). Re-download from the Firebase Console.";
@@ -95,9 +96,6 @@ async function getAdminApp() {
  * Verify a Firebase ID token (issued by the Firebase client SDK after
  * Google Sign-In). Returns the decoded payload, including the
  * stable Firebase `uid` and the user's `email` and `name`.
- *
- * The backend NEVER trusts the token's contents until this function
- * has verified the signature and checked expiry.
  */
 export async function verifyIdToken(idToken: string): Promise<{
   uid: string;
