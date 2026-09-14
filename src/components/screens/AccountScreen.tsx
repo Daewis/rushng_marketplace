@@ -1,28 +1,62 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   ChevronRight, ShoppingBag, Wrench, Car, Heart, MapPin,
   CreditCard, Bell, Shield, HelpCircle, LogOut, Store, Wallet,
-  Camera, Loader2,
+  Camera, Loader2, Trash2,
 } from "lucide-react";
 import { useRush } from "@/lib/store";
-import { useLogout, useUpdateProfile, useUploadFile } from "@/lib/hooks";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import {
+  useLogout,
+  useUpdateProfile,
+  useUploadFile,
+  useDeleteAccount,
+  useDeleteStore,
+} from "@/lib/hooks";
+import { RushLogo } from "@/components/RushLogo";
+import { NameAvatar } from "@/components/NameAvatar";
 import { naira } from "@/lib/data";
 
 export function AccountScreen() {
-  const { user, navigate, pushToast, setAuthenticatedUser } = useRush();
+  const { user, navigate, pushToast } = useRush();
   const logoutMut = useLogout();
   const [editOpen, setEditOpen] = useState(false);
+
+  // Danger-zone mutations. The store-delete slug comes from the
+  // logged-in user's vendorProfile — if they don't have one, the
+  // mutation is left idle and the "Delete my store" button isn't
+  // rendered at all (controlled by the `vendorCap` check below).
+  const vendorSlug = (user as any)?.vendorProfile?.slug;
+  const deleteAccountMut = useDeleteAccount();
+  const deleteStoreMut = useDeleteStore(vendorSlug || "__none__");
+
+  // After either destructive op succeeds, the simplest correct thing
+  // is to hard-reload — clears Zustand state, TanStack cache, and
+  // any lingering references to the now-deleted records. The server
+  // session cookie was already cleared by the logout cascade (for
+  // delete-account) or the next /api/auth/me fetch will return the
+  // updated user with no VENDOR cap (for delete-store).
+  useEffect(() => {
+    if (deleteAccountMut.isSuccess) {
+      // Force-reload to root so the landing gate shows.
+      window.location.href = "/";
+    }
+  }, [deleteAccountMut.isSuccess]);
+
+  useEffect(() => {
+    if (deleteStoreMut.isSuccess) {
+      // Reload to root — the user no longer has a VENDOR capability,
+      // so they should land on the customer HomeScreen.
+      window.location.href = "/";
+    }
+  }, [deleteStoreMut.isSuccess]);
 
   // If not logged in, show login prompt
   if (!user) {
     return (
       <div className="px-4 pt-16 pb-6 text-center">
-        <div className="h-16 w-16 rounded-2xl rush-gradient mx-auto flex items-center justify-center shadow-rush mb-4">
-          <span className="text-white font-extrabold text-2xl">R</span>
-        </div>
+        <RushLogo size={64} className="mx-auto mb-4" />
         <h1 className="text-xl font-extrabold text-ink">Sign in to Rush</h1>
         <p className="text-sm text-ink-soft mt-1 mb-5">
           One account to shop, sell, offer services, and ride.
@@ -54,6 +88,44 @@ export function AccountScreen() {
     window.location.href = "/";
   };
 
+  const handleDeleteStore = () => {
+    if (!vendorSlug) {
+      pushToast({ title: "No store to delete" });
+      return;
+    }
+    const ok = window.confirm(
+      "This will permanently delete your store and ALL products in it. This cannot be undone. Continue?",
+    );
+    if (!ok) return;
+    const typed = window.prompt('Type "DELETE" to confirm.');
+    if (typed !== "DELETE") {
+      pushToast({ title: "Cancelled — store was not deleted." });
+      return;
+    }
+    deleteStoreMut.mutate(undefined, {
+      onError: (err: any) => {
+        pushToast({ title: "Failed to delete store", description: err?.message });
+      },
+    });
+  };
+
+  const handleDeleteAccount = () => {
+    const ok = window.confirm(
+      "This will PERMANENTLY delete your account, store, services, rides, wallet, and all related data. This CANNOT be undone. Continue?",
+    );
+    if (!ok) return;
+    const typed = window.prompt('Type "DELETE" to confirm.');
+    if (typed !== "DELETE") {
+      pushToast({ title: "Cancelled — account was not deleted." });
+      return;
+    }
+    deleteAccountMut.mutate(undefined, {
+      onError: (err: any) => {
+        pushToast({ title: "Failed to delete account", description: err?.message });
+      },
+    });
+  };
+
   return (
     <div className="pb-6">
       <div className="px-4 pt-3 pb-2">
@@ -65,10 +137,17 @@ export function AccountScreen() {
         <div className="rounded-2xl rush-gradient p-4 text-white shadow-rush relative overflow-hidden">
           <div className="absolute -right-6 -top-6 h-24 w-24 rounded-full bg-white/10" />
           <div className="relative flex items-center gap-3">
-            <Avatar className="h-14 w-14 ring-2 ring-white/40">
-              {user.avatar && <AvatarImage src={user.avatar} alt={user.name} />}
-              <AvatarFallback>{user.name?.[0] || "?"}</AvatarFallback>
-            </Avatar>
+            <div className="h-14 w-14 rounded-full ring-2 ring-white/40 overflow-hidden shrink-0">
+              {user.avatar ? (
+                <img
+                  src={user.avatar}
+                  alt={user.name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <NameAvatar name={user.name} size={56} />
+              )}
+            </div>
             <div className="flex-1 min-w-0">
               <p className="text-base font-bold">{user.name}</p>
               <p className="text-xs opacity-90 flex items-center gap-1">
@@ -209,8 +288,64 @@ export function AccountScreen() {
         </button>
       </div>
 
+      {/* ─── Danger zone ───────────────────────────────────────────────
+          Both destructive actions live behind a two-step client-side
+          guard (confirm + prompt) on top of the server's `{ confirm:
+          true }` body check. The buttons are styled with destructive/
+          30 border + destructive text so they read as "scary" without
+          being neon-red alarming. */}
+      <section className="px-4 pt-5">
+        <p className="text-xs font-semibold text-destructive/80 uppercase tracking-wider mb-2">
+          Danger zone
+        </p>
+        <div className="rounded-2xl bg-card border border-destructive/30 overflow-hidden divide-y divide-destructive/30">
+          {vendorCap && (
+            <button
+              onClick={handleDeleteStore}
+              disabled={deleteStoreMut.isPending}
+              className="w-full flex items-center gap-3 p-3 text-left hover:bg-destructive/5 transition-colors disabled:opacity-60"
+            >
+              <div className="h-9 w-9 rounded-xl bg-destructive/10 text-destructive flex items-center justify-center shrink-0">
+                <Trash2 className="h-4 w-4" />
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-semibold text-destructive">
+                  Delete my store
+                </p>
+                <p className="text-[11px] text-ink-soft line-clamp-1">
+                  {deleteStoreMut.isPending
+                    ? "Deleting…"
+                    : "Removes your storefront and all products. Your account stays."}
+                </p>
+              </div>
+              <ChevronRight className="h-4 w-4 text-destructive/70 shrink-0" />
+            </button>
+          )}
+          <button
+            onClick={handleDeleteAccount}
+            disabled={deleteAccountMut.isPending}
+            className="w-full flex items-center gap-3 p-3 text-left hover:bg-destructive/5 transition-colors disabled:opacity-60"
+          >
+            <div className="h-9 w-9 rounded-xl bg-destructive/10 text-destructive flex items-center justify-center shrink-0">
+              <Trash2 className="h-4 w-4" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-semibold text-destructive">
+                Delete my account
+              </p>
+              <p className="text-[11px] text-ink-soft line-clamp-1">
+                {deleteAccountMut.isPending
+                  ? "Deleting…"
+                  : "Permanently removes your account and all data. Cannot be undone."}
+              </p>
+            </div>
+            <ChevronRight className="h-4 w-4 text-destructive/70 shrink-0" />
+          </button>
+        </div>
+      </section>
+
       <div className="px-4 pt-4 text-center">
-        <p className="text-[10px] text-ink-soft">Rush v2.0 · One account, many possibilities</p>
+        <p className="text-[10px] text-ink-soft">One account, many possibilities</p>
       </div>
 
       {/* Profile edit overlay */}
@@ -329,10 +464,17 @@ function ProfileEditSheet({ open, onClose }: { open: boolean; onClose: () => voi
         {/* Avatar */}
         <div className="flex flex-col items-center mb-6">
           <div className="relative">
-            <Avatar className="h-24 w-24 ring-4 ring-rush/20">
-              {avatar && <AvatarImage src={avatar} alt={name} />}
-              <AvatarFallback className="text-3xl">{name?.[0] || "?"}</AvatarFallback>
-            </Avatar>
+            <div className="h-24 w-24 rounded-full ring-4 ring-rush/20 overflow-hidden flex items-center justify-center">
+              {avatar ? (
+                <img
+                  src={avatar}
+                  alt={name}
+                  className="w-full h-full object-cover"
+                />
+              ) : (
+                <NameAvatar name={name || "?"} size={96} />
+              )}
+            </div>
             <button
               onClick={() => fileRef.current?.click()}
               disabled={uploadingAvatar}

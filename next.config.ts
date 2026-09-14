@@ -10,6 +10,19 @@ const withPWA = withPWAInit({
   register: true,
   workboxOptions: {
     disableDevLogs: true,
+    // Exclude cross-origin requests that the SW cannot control. Without
+    // this, Workbox tries to cache Google auth / Firebase / Paystack
+    // responses and throws opaque-error warnings. Each entry is a regex
+    // tested against the request URL.
+    exclude: [
+      /^https:\/\/apis\.google\.com\/.*/,
+      /^https:\/\/.*\.googleapis\.com\/.*/,
+      /^https:\/\/accounts\.google\.com\/.*/,
+      /^https:\/\/.*\.firebaseio\.com\/.*/,
+      /^https:\/\/.*\.firebaseapp\.com\/.*/,
+      /^https:\/\/js\.paystack\.co\/.*/,
+      /^https:\/\/checkout\.paystack\.com\/.*/,
+    ],
   },
 });
 
@@ -47,11 +60,11 @@ const nextConfig: NextConfig = {
         key: "Content-Security-Policy",
         value: [
           "default-src 'self'",
-          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://apis.google.com",
+          "script-src 'self' 'unsafe-inline' 'unsafe-eval' https://www.gstatic.com https://apis.google.com https://www.google.com",
           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
           "font-src 'self' https://fonts.gstatic.com",
           "img-src 'self' data: https: blob:",
-          "connect-src 'self' https://*.googleapis.com https://identitytoolkit.googleapis.com wss://*.firebaseio.com https://api.paystack.co",
+          "connect-src 'self' https://*.googleapis.com https://apis.google.com https://identitytoolkit.googleapis.com wss://*.firebaseio.com https://api.paystack.co",
           "frame-src 'self' https://*.firebaseapp.com https://js.paystack.co https://checkout.paystack.com",
           "frame-ancestors 'self'",
           "form-action 'self'",

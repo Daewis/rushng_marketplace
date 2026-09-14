@@ -171,13 +171,17 @@ export function PhotoUploader({
         )}
       </div>
 
-      {/* Hidden file input — multi-select, images only. */}
+      {/* Hidden file input — multi-select, images only.
+          We do NOT set `capture="environment"` here. That attribute
+          forces the OS file picker straight to the rear camera on
+          mobile, with no way to pick from the gallery. Letting the
+          picker show both options is the right default — most product
+          photos are shot ahead of time, not live. */}
       <input
         ref={fileRef}
         type="file"
         accept="image/*"
         multiple
-        capture="environment"
         className="hidden"
         onChange={(e) => {
           void handleFilesPicked(e.target.files);

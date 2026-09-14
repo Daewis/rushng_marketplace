@@ -3,7 +3,8 @@
 import { useState, useRef, useEffect } from "react";
 import { Search, Bell, MapPin, LogIn, X } from "lucide-react";
 import { useRush } from "@/lib/store";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { RushLogo } from "@/components/RushLogo";
+import { NameAvatar } from "@/components/NameAvatar";
 import { CONTENT_WIDTH } from "@/lib/layout";
 import {
   useNotifications,
@@ -61,12 +62,7 @@ export function TopBar({ hideSearch = false }: { hideSearch?: boolean }) {
             onClick={() => navigate("home")}
             className="flex items-center gap-2 group"
           >
-            <div className="h-8 w-8 rounded-xl rush-gradient flex items-center justify-center shadow-rush">
-              <span className="text-white font-extrabold text-sm">R</span>
-            </div>
-            <span className="font-extrabold text-lg tracking-tight text-ink">
-              rush
-            </span>
+            <RushLogo size={32} withWordmark wordmarkClass="text-lg" />
           </button>
 
           <div className="flex items-center gap-1.5">
@@ -120,13 +116,18 @@ export function TopBar({ hideSearch = false }: { hideSearch?: boolean }) {
             {user ? (
               <button
                 onClick={() => navigate("account")}
-                className="rounded-full"
+                className="rounded-full ring-2 ring-rush/20 overflow-hidden"
                 aria-label="Account"
               >
-                <Avatar className="h-9 w-9 ring-2 ring-rush/20">
-                  {user.avatar && <AvatarImage src={user.avatar} alt={user.name} />}
-                  <AvatarFallback>{user.name?.[0] || "?"}</AvatarFallback>
-                </Avatar>
+                {user.avatar ? (
+                  <img
+                    src={user.avatar}
+                    alt={user.name}
+                    className="h-9 w-9 object-cover"
+                  />
+                ) : (
+                  <NameAvatar name={user.name} size={36} />
+                )}
               </button>
             ) : (
               <button

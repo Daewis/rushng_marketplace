@@ -4,6 +4,7 @@ import { Star, MapPin, ChevronRight } from "lucide-react";
 import type { Product, VendorProfile } from "@/lib/types";
 import { naira } from "@/lib/data";
 import { useRush } from "@/lib/store";
+import { NameAvatar } from "@/components/NameAvatar";
 
 // ---------- Section header ----------
 export function SectionHeader({
@@ -119,14 +120,23 @@ export function VendorCard({ vendor }: { vendor: VendorProfile }) {
             loading="lazy"
             className="w-full h-full object-cover"
           />
-        ) : null}
+        ) : (
+          // Gradient fallback so the card header isn't a blank grey
+          // box when a vendor hasn't uploaded a cover image yet.
+          <div className="w-full h-full rush-gradient-soft" />
+        )}
         <div className="absolute inset-0 bg-gradient-to-t from-ink/40 to-transparent" />
       </div>
       <div className="p-3 -mt-7 relative">
         <div className="h-12 w-12 rounded-xl overflow-hidden border-2 border-background bg-muted">
           {vendor.logo ? (
             <img src={vendor.logo} alt={vendor.businessName} className="w-full h-full object-cover" />
-          ) : null}
+          ) : (
+            // No logo uploaded — fall back to a vibrant gradient
+            // initials avatar so the storefront card still looks
+            // branded instead of empty.
+            <NameAvatar name={vendor.businessName} size={48} shape="square" />
+          )}
         </div>
         <p className="text-sm font-bold text-ink mt-2 line-clamp-1">
           {vendor.businessName}

@@ -22,7 +22,11 @@ const eslintConfig = [...nextCoreWebVitals, ...nextTypescript, {
     "@typescript-eslint/no-unused-vars": "warn",
     "@typescript-eslint/ban-ts-comment": "warn",
     "@typescript-eslint/prefer-as-const": "warn",
-    "@typescript-eslint/no-unused-disable-directive": "warn",
+    // NOTE: previously had `@typescript-eslint/no-unused-disable-directive`
+    // here, but that rule doesn't exist in the installed @typescript-eslint
+    // plugin (it was renamed and moved to ESLint core as
+    // `reportUnusedDisableDirectives`). Removed so `bun run lint` actually
+    // runs instead of crashing at config-load time.
 
     // React
     "react/no-unescaped-entities": "off",

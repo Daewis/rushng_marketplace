@@ -128,10 +128,15 @@ export function AuthScreen() {
 
         <div className="relative">
           <div className="flex items-center gap-2 mb-6">
-            <div className="h-10 w-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
-              <span className="text-white font-extrabold text-lg">
-                R
-              </span>
+            <div className="h-10 w-10 rounded-xl bg-white/20 backdrop-blur-sm overflow-hidden flex items-center justify-center">
+              {/* Real logo on top of the white/20 backdrop — the
+                  JPEG has its own orange background so it reads
+                  cleanly even through the translucent overlay. */}
+              <img
+                src="/rush-logo.jpg"
+                alt="Rush"
+                className="w-full h-full object-cover"
+              />
             </div>
 
             <span className="font-extrabold text-2xl tracking-tight">

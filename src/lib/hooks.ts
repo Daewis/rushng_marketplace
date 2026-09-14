@@ -537,3 +537,81 @@ export function useMarkNotificationsRead() {
     onSuccess: () => qc.invalidateQueries({ queryKey: ["notifications"] }),
   });
 }
+
+// ─── Danger zone: delete account + delete store ─────────────────────────
+//
+// Both hooks hit the DELETE endpoints we added on /api/auth/me and
+// /api/stores/[slug]. Both require `{ confirm: true }` in the body —
+// we let the calling component craft the UX (a "type DELETE" prompt
+// is the recommended pattern) and just forward the confirmation.
+
+/**
+ * useDeleteAccount — permanently delete the authenticated user's
+ * account + all derived data (vendor profile, provider profile,
+ * rider profile, wallet, orders, rides, payments, etc.).
+ *
+ * On success the server returns `{ ok: true }`. The hook then
+ * invalidates EVERY query in the cache so the client refetches with
+ * a cleared session — the next `/api/auth/me` call returns
+ * `{ user: null }` and AuthHydrator flips the user to null,
+ * triggering the landing-gate UI.
+ */
+export function useDeleteAccount() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/auth/me", {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: true }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to delete account");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      // Invalidate everything — the user record is gone, so every
+      // cached query for orders / rides / stores / etc. is now stale.
+      qc.invalidateQueries();
+    },
+  });
+}
+
+/**
+ * useDeleteStore — tear down the calling user's vendor store. The
+ * user account stays; only the VENDOR capability + the
+ * vendorProfile + the vendor's products are removed.
+ *
+ * `slug` is required — pass the vendor profile's slug (the same one
+ * used to construct `/stores/[slug]` URLs).
+ */
+export function useDeleteStore(slug: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const res = await fetch(`/api/stores/${slug}`, {
+        method: "DELETE",
+        credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ confirm: true }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to delete store");
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      // `me` so the user's capabilities array refreshes (the VENDOR
+      // cap is now gone) and the TopBar / AccountScreen re-render.
+      qc.invalidateQueries({ queryKey: ["me"] });
+      // `stores` so the public store list no longer includes this one.
+      qc.invalidateQueries({ queryKey: ["stores"] });
+      // `products` because all products under this vendor are gone.
+      qc.invalidateQueries({ queryKey: ["products"] });
+    },
+  });
+}

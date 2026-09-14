@@ -33,6 +33,7 @@ import {
   OnboardingRiderScreen,
 } from "@/components/onboarding/OnboardingFlows";
 import { AdminPanel } from "@/components/admin/AdminPanel";
+import { LandingScreen } from "@/components/screens/LandingScreen";
 
 // Screens that should NOT show the global TopBar (they have their own header)
 const HIDE_TOPBAR: string[] = [
@@ -109,18 +110,34 @@ export default function HomePage() {
   // selector, useRush() subscribes to the entire store — every cart
   // update, toast push, search-query change, or auth hydration
   // would re-render the WHOLE app (and briefly flc the data screens
-  // before TanStack Query's cached data re-resolves). Selecting
-  // just `view` + `user` + `toasts` + the actions we need keeps
-  // the re-render surface tight.
+  // before TanStack Query's cached data re-resolves). Selecting just
+  // `view` + `user` keeps the re-render surface tight. The toast
+  // subscription lives in the dedicated <Toasts /> component below.
   const view = useRush((s) => s.view);
   const user = useRush((s) => s.user);
-  const toasts = useRush((s) => s.toasts);
-  const dismissToast = useRush((s) => s.dismissToast);
   const { isLoading: meLoading } = useMe();
 
   // Show auth screen if user tries to access protected route without login
   const isProtected = PROTECTED.includes(view);
   const showAuth = !meLoading && isProtected && !user;
+
+  // Landing gate — first-time visitors who aren't on a protected route
+  // and aren't authenticated see the full-screen LandingScreen hero
+  // instead of the half-empty TopBar + empty HomeScreen combo.
+  const showLanding = !meLoading && !user && !isProtected;
+
+  // Landing takes over the entire viewport — no TopBar, no BottomNav,
+  // no main scroll container. Toasts still render on top (handled
+  // below, outside this conditional).
+  if (showLanding) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <AuthHydrator />
+        <LandingScreen />
+        <Toasts />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -148,21 +165,34 @@ export default function HomePage() {
       {/* BottomNav (mobile/tablet only) */}
       {!HIDE_BOTTOMNAV.includes(view) && !showAuth && <BottomNav />}
 
-      {/* Toasts */}
-      <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 w-full max-w-sm px-4 pointer-events-none">
-        {toasts.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => dismissToast(t.id)}
-            className="bg-ink text-white rounded-xl px-4 py-3 text-sm font-semibold shadow-lg animate-in fade-in slide-in-from-top-2 w-full pointer-events-auto"
-          >
-            <p className="leading-tight">{t.title}</p>
-            {t.description && (
-              <p className="text-xs font-normal opacity-80 mt-0.5">{t.description}</p>
-            )}
-          </button>
-        ))}
-      </div>
+      <Toasts />
+    </div>
+  );
+}
+
+/**
+ * Toasts — top-center stack. Extracted into its own component so the
+ * landing-gate branch above can render it without duplicating the
+ * markup. Always rendered at the top level so toasts fire even on
+ * the landing screen (e.g. "Welcome to Rush" after sign-in).
+ */
+function Toasts() {
+  const toasts = useRush((s) => s.toasts);
+  const dismissToast = useRush((s) => s.dismissToast);
+  return (
+    <div className="fixed top-4 left-1/2 -translate-x-1/2 z-50 flex flex-col gap-2 w-full max-w-sm px-4 pointer-events-none">
+      {toasts.map((t) => (
+        <button
+          key={t.id}
+          onClick={() => dismissToast(t.id)}
+          className="bg-ink text-white rounded-xl px-4 py-3 text-sm font-semibold shadow-lg animate-in fade-in slide-in-from-top-2 w-full pointer-events-auto"
+        >
+          <p className="leading-tight">{t.title}</p>
+          {t.description && (
+            <p className="text-xs font-normal opacity-80 mt-0.5">{t.description}</p>
+          )}
+        </button>
+      ))}
     </div>
   );
 }
