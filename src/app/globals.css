@@ -56,45 +56,48 @@
 
 :root {
   --radius: 0.875rem;
-  --background: oklch(0.99 0.005 60);
+  /* Warmer background — not pure white, has a subtle peach warmth
+     that matches the RUSH brand. This is the base for the entire
+     app's "feel" — it should NOT look like Jiji's stark white. */
+  --background: oklch(0.98 0.008 55);
   --foreground: oklch(0.18 0.02 30);
-  --card: oklch(1 0 0);
+  --card: oklch(1 0.002 55);
   --card-foreground: oklch(0.18 0.02 30);
-  --popover: oklch(1 0 0);
+  --popover: oklch(1 0.002 55);
   --popover-foreground: oklch(0.18 0.02 30);
   --primary: oklch(0.205 0 0);
   --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0.005 60);
+  --secondary: oklch(0.96 0.008 55);
   --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0.005 60);
-  --muted-foreground: oklch(0.55 0.01 30);
-  --accent: oklch(0.97 0.005 60);
+  --muted: oklch(0.96 0.008 55);
+  --muted-foreground: oklch(0.52 0.012 30);
+  --accent: oklch(0.96 0.008 55);
   --accent-foreground: oklch(0.205 0 0);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.92 0.005 60);
-  --input: oklch(0.92 0.005 60);
+  --border: oklch(0.91 0.006 55);
+  --input: oklch(0.91 0.006 55);
   --ring: oklch(0.7 0.18 40);
 
-  /* Rush brand system */
-  --rush: oklch(0.68 0.19 38);            /* vivid orange — Rush primary */
+  /* Rush brand system — bolder, more saturated */
+  --rush: oklch(0.7 0.2 38);             /* vivid orange — Rush primary */
   --rush-foreground: oklch(0.99 0.005 60);
-  --rush-soft: oklch(0.96 0.04 50);       /* warm peach tint for surfaces */
-  --rush-deep: oklch(0.55 0.22 35);       /* deeper burnt orange for accents */
+  --rush-soft: oklch(0.95 0.05 50);      /* warm peach tint for surfaces */
+  --rush-deep: oklch(0.52 0.22 35);      /* deeper burnt orange for accents */
 
-  --ink: oklch(0.18 0.02 30);             /* near-black warm ink */
-  --ink-soft: oklch(0.42 0.02 30);        /* secondary text */
-  --surface: oklch(0.99 0.005 60);
-  --surface-2: oklch(0.965 0.006 60);
+  --ink: oklch(0.16 0.015 30);           /* near-black warm ink */
+  --ink-soft: oklch(0.4 0.015 30);       /* secondary text */
+  --surface: oklch(0.98 0.008 55);
+  --surface-2: oklch(0.96 0.01 55);
 
   --success: oklch(0.62 0.16 145);
   --warning: oklch(0.78 0.15 75);
 
-  --chart-1: oklch(0.68 0.19 38);
+  --chart-1: oklch(0.7 0.2 38);
   --chart-2: oklch(0.62 0.16 145);
   --chart-3: oklch(0.6 0.12 240);
   --chart-4: oklch(0.78 0.15 75);
-  --chart-5: oklch(0.55 0.22 35);
-  --sidebar: oklch(0.985 0 0);
+  --chart-5: oklch(0.52 0.22 35);
+  --sidebar: oklch(0.985 0.002 55);
   --sidebar-foreground: oklch(0.145 0 0);
   --sidebar-primary: oklch(0.205 0 0);
   --sidebar-primary-foreground: oklch(0.985 0 0);

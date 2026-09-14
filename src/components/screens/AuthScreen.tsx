@@ -32,7 +32,7 @@ export function AuthScreen() {
 
   const loginMut = useLogin();
   const registerMut = useRegister();
-  const { pushToast, back } = useRush();
+  const { pushToast, back, navigate } = useRush();
 
   const loading =
     loginMut.isPending ||
@@ -72,6 +72,13 @@ export function AuthScreen() {
         });
       }
 
+      // After successful login/register, navigate to home + reload
+      // the page so useMe() re-fetches with the new session cookie.
+      // The navigate("home") sets the Zustand view to "home" before
+      // the reload, so the user lands on HomeScreen (not the landing
+      // page gate). The removeQueries in the login/register hook
+      // ensures the stale { user: null } cache is cleared.
+      navigate("home");
       window.location.href = "/";
     } catch (err: any) {
       setError(toAppError(err).message);
@@ -102,6 +109,13 @@ export function AuthScreen() {
       });
 
       // The backend has created the RUSH session cookie.
+      // After successful login/register, navigate to home + reload
+      // the page so useMe() re-fetches with the new session cookie.
+      // The navigate("home") sets the Zustand view to "home" before
+      // the reload, so the user lands on HomeScreen (not the landing
+      // page gate). The removeQueries in the login/register hook
+      // ensures the stale { user: null } cache is cleared.
+      navigate("home");
       window.location.href = "/";
     } catch (err: any) {
       setError(toAppError(err).message);

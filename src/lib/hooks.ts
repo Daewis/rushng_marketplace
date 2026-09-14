@@ -44,7 +44,17 @@ export function useLogin() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (body: { email: string; password: string }) => authRepo.login(body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["me"] }),
+    onSuccess: () => {
+      // Remove the cached { user: null } from the pre-login state so
+      // the next useMe() call forces a fresh fetch from the server
+      // (which will now return the authenticated user because the
+      // session cookie was just set). Without this, TanStack Query
+      // would return the stale null for up to 30s (staleTime),
+      // causing the landing page gate to briefly re-appear after
+      // login before the background refetch resolves.
+      qc.removeQueries({ queryKey: ["me"] });
+      qc.invalidateQueries({ queryKey: ["me"] });
+    },
   });
 }
 
@@ -58,7 +68,11 @@ export function useRegister() {
       phone?: string;
       location?: string;
     }) => authRepo.register(body),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ["me"] }),
+    onSuccess: () => {
+      // Same as login — remove stale null cache so useMe() re-fetches.
+      qc.removeQueries({ queryKey: ["me"] });
+      qc.invalidateQueries({ queryKey: ["me"] });
+    },
   });
 }
 
