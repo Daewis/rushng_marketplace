@@ -1,7 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { useLogin, useRegister } from "@/lib/hooks";
 import { useRush } from "@/lib/store";
 import {
@@ -14,7 +13,7 @@ import {
   MapPin,
 } from "lucide-react";
 import { isFirebaseConfigured } from "@/lib/auth-providers/firebase-client";
-import { signInWithGoogle, handleRedirectResult } from "@/lib/auth-providers/google";
+import { signInWithGoogle } from "@/lib/auth-providers/google";
 import { toAppError } from "@/lib/errors";
 
 type Mode = "login" | "register";
@@ -33,45 +32,12 @@ export function AuthScreen() {
 
   const loginMut = useLogin();
   const registerMut = useRegister();
-  const qc = useQueryClient();
-  const { pushToast, back, navigate } = useRush();
+  const { pushToast, back } = useRush();
 
   const loading =
     loginMut.isPending ||
     registerMut.isPending ||
     googleLoading;
-
-  // On mount, check if we're returning from a Google redirect sign-in.
-  // If so, getRedirectResult() returns the credential, we POST the ID
-  // token to /api/auth/firebase, and navigate to home on success.
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      if (!isFirebaseConfigured) return;
-      try {
-        const result = await handleRedirectResult();
-        if (cancelled || !result) return;
-        // Redirect sign-in succeeded — navigate to home.
-        // Clear the stale { user: null } cache (same as email/password
-        // login) instead of a hard `window.location.href` reload. A
-        // full reload right after the Google redirect races the PWA
-        // service worker's navigation caching for "/" and was
-        // surfacing as Workbox errors right after the redirect
-        // completed.
-        qc.removeQueries({ queryKey: ["me"] });
-        qc.invalidateQueries({ queryKey: ["me"] });
-        pushToast({ title: "Welcome to Rush!" });
-        navigate("home");
-      } catch (err: any) {
-        if (!cancelled) {
-          setError(toAppError(err).message);
-          setGoogleLoading(false);
-        }
-      }
-    })();
-    return () => { cancelled = true; };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   const handleBack = () => {
     back();
@@ -106,13 +72,6 @@ export function AuthScreen() {
         });
       }
 
-      // After successful login/register, navigate to home + reload
-      // the page so useMe() re-fetches with the new session cookie.
-      // The navigate("home") sets the Zustand view to "home" before
-      // the reload, so the user lands on HomeScreen (not the landing
-      // page gate). The removeQueries in the login/register hook
-      // ensures the stale { user: null } cache is cleared.
-      navigate("home");
       window.location.href = "/";
     } catch (err: any) {
       setError(toAppError(err).message);
@@ -143,14 +102,7 @@ export function AuthScreen() {
       });
 
       // The backend has created the RUSH session cookie.
-      // After successful login/register, navigate to home + reload
-      // the page so useMe() re-fetches with the new session cookie.
-      // The navigate("home") sets the Zustand view to "home" before
-      // page gate, without a hard reload that races the PWA service
-      // worker's navigation caching for "/".
-      qc.removeQueries({ queryKey: ["me"] });
-      qc.invalidateQueries({ queryKey: ["me"] });
-      navigate("home");
+      window.location.href = "/";
     } catch (err: any) {
       setError(toAppError(err).message);
     } finally {
@@ -176,15 +128,10 @@ export function AuthScreen() {
 
         <div className="relative">
           <div className="flex items-center gap-2 mb-6">
-            <div className="h-10 w-10 rounded-xl bg-white/20 backdrop-blur-sm overflow-hidden flex items-center justify-center">
-              {/* Real logo on top of the white/20 backdrop — the
-                  JPEG has its own orange background so it reads
-                  cleanly even through the translucent overlay. */}
-              <img
-                src="/rush-logo.jpg"
-                alt="Rush"
-                className="w-full h-full object-cover"
-              />
+            <div className="h-10 w-10 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center">
+              <span className="text-white font-extrabold text-lg">
+                R
+              </span>
             </div>
 
             <span className="font-extrabold text-2xl tracking-tight">
