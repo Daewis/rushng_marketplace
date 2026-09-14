@@ -1,3 +1,26 @@
+import type { NextConfig } from "next";
+import withPWAInit from "@ducanh2912/next-pwa";
+
+const withPWA = withPWAInit({
+  dest: "public",
+  disable: process.env.NODE_ENV === "development",
+  register: true,
+  workboxOptions: {
+    disableDevLogs: true,
+    // Exclude Google Auth, Firebase, and Paystack endpoints from Service Worker caching
+    exclude: [
+      /^https:\/\/apis\.google\.com\/.*/,
+      /^https:\/\/.*\.googleapis\.com\/.*/,
+      /^https:\/\/accounts\.google\.com\/.*/,
+      /^https:\/\/.*\.firebaseio\.com\/.*/,
+      /^https:\/\/.*\.firebaseapp\.com\/.*/,
+      /^https:\/\/js\.paystack\.co\/.*/,
+      /^https:\/\/checkout\.paystack\.com\/.*/,
+      /\/__\/auth\/.*/,
+    ],
+  },
+});
+
 const nextConfig: NextConfig = {
   output: "standalone",
   typescript: {
