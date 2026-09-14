@@ -4,55 +4,68 @@ import { requireUser } from "@/lib/auth";
 import { checkCapability, suspendedMessage, pendingVerificationMessage } from "@/lib/capability";
 
 export async function GET(req: NextRequest) {
-  const url = new URL(req.url);
-  const category = url.searchParams.get("category");
-  const query = url.searchParams.get("q");
-  const vendorId = url.searchParams.get("vendorId");
+  try {
+    const url = new URL(req.url);
+    const category = url.searchParams.get("category");
+    const query = url.searchParams.get("q");
+    const vendorId = url.searchParams.get("vendorId");
 
-  const products = await db.product.findMany({
-    where: {
-      ...(category && category !== "All" ? { category } : {}),
-      ...(vendorId ? { vendorId } : {}),
-      ...(query
-        ? { name: { contains: query } }
-        : {}),
-    },
-    include: {
-      vendor: {
-        select: {
-          id: true,
-          businessName: true,
-          slug: true,
-          location: true,
+    const products = await db.product.findMany({
+      where: {
+        ...(category && category !== "All" ? { category } : {}),
+        ...(vendorId ? { vendorId } : {}),
+        ...(query
+          ? { name: { contains: query } }
+          : {}),
+      },
+      include: {
+        vendor: {
+          select: {
+            id: true,
+            businessName: true,
+            slug: true,
+            location: true,
+          },
         },
       },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 50,
-  });
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
 
-  // Transform to UI shape (parse JSON fields)
-  const transformed = products.map((p) => ({
-    id: p.id,
-    vendorId: p.vendorId,
-    vendorName: p.vendor.businessName,
-    vendorSlug: p.vendor.slug,
-    name: p.name,
-    description: p.description,
-    price: p.price,
-    compareAtPrice: p.compareAtPrice ?? undefined,
-    images: JSON.parse(p.images),
-    category: p.category,
-    condition: p.condition ?? undefined,
-    stock: p.stock,
-    rating: p.rating,
-    reviewCount: p.reviewCount,
-    location: p.location,
-    createdAt: p.createdAt.toISOString(),
-    tags: JSON.parse(p.tags),
-  }));
+    // Transform to UI shape (parse JSON fields)
+    const transformed = products.map((p) => ({
+      id: p.id,
+      vendorId: p.vendorId,
+      vendorName: p.vendor.businessName,
+      vendorSlug: p.vendor.slug,
+      name: p.name,
+      description: p.description,
+      price: p.price,
+      compareAtPrice: p.compareAtPrice ?? undefined,
+      images: JSON.parse(p.images),
+      category: p.category,
+      condition: p.condition ?? undefined,
+      stock: p.stock,
+      rating: p.rating,
+      reviewCount: p.reviewCount,
+      location: p.location,
+      createdAt: p.createdAt.toISOString(),
+      tags: JSON.parse(p.tags),
+    }));
 
-  return NextResponse.json({ products: transformed });
+    return NextResponse.json({ products: transformed });
+  } catch (err: any) {
+    // Public read endpoint — must never 500 with a stack trace.
+    // Log the real error server-side, return a structured 500 to the
+    // client so TanStack Query marks it as `error` and the screen
+    // shows the "Something went wrong, try again" state with a retry
+    // button (instead of crashing the whole homepage).
+    console.error("[products GET] error", err?.message ?? err);
+    return NextResponse.json(
+      { error: "Failed to load products", details: err?.message },
+      { status: 500 },
+    );
+  }
 }
 
 // POST /api/products — vendor creates a product under their own store.

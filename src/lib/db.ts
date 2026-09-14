@@ -41,8 +41,10 @@ const MONGODB_URI =
 const MONGODB_DB = process.env.MONGODB_DB || "rush";
 
 interface CachedClient {
-  client: MongoClient;
-  db: MongoDb;
+  // client + db are null while the connect promise is in flight;
+  // they're populated once it resolves.
+  client: MongoClient | null;
+  db: MongoDb | null;
   promise: Promise<{ client: MongoClient; db: MongoDb }> | null;
 }
 
@@ -58,7 +60,21 @@ async function connect(): Promise<{ client: MongoClient; db: MongoDb }> {
     );
   }
 
-  if (globalThis.__mongoCache) {
+  // ─── Cache the PROMISE, not the result ─────────────────────────────
+  // On a cold start (Vercel function boot, fresh dev server), many
+  // concurrent requests hit `connect()` at the same time. If we
+  // cached only the *resolved result*, each concurrent caller would
+  // enter the IIFE below and create its own MongoClient — 5 parallel
+  // cold-start requests = 5 MongoClients, 5 connection handshakes,
+  // 5x the Atlas connection count, and a race to write the cache.
+  //
+  // By caching the IN-FLIGHT promise, every concurrent caller awaits
+  // the same promise and gets the same client. If the connect fails,
+  // we clear the cache so the next request retries fresh.
+  if (globalThis.__mongoCache?.promise) {
+    return globalThis.__mongoCache.promise;
+  }
+  if (globalThis.__mongoCache?.client && globalThis.__mongoCache?.db) {
     return { client: globalThis.__mongoCache.client, db: globalThis.__mongoCache.db };
   }
 
@@ -83,15 +99,30 @@ async function connect(): Promise<{ client: MongoClient; db: MongoDb }> {
     return { client, db };
   })();
 
-  // Cache the promise so concurrent first-request callers share one
-  // connect() call rather than racing to create multiple clients.
-  const result = await promise;
+  // Store the in-flight promise immediately so concurrent callers see it.
   globalThis.__mongoCache = {
-    client: result.client,
-    db: result.db,
-    promise: null,
+    client: null,
+    db: null,
+    promise,
   };
-  return result;
+
+  try {
+    const result = await promise;
+    // Promote the cache from "in-flight" to "resolved" — keep the
+    // promise field too so subsequent calls short-circuit on the
+    // first check above without re-entering this block.
+    globalThis.__mongoCache = {
+      client: result.client,
+      db: result.db,
+      promise,
+    };
+    return result;
+  } catch (err) {
+    // Connection failed — clear the cache so the next request
+    // retries fresh instead of awaiting a rejected promise forever.
+    globalThis.__mongoCache = undefined;
+    throw err;
+  }
 }
 
 /** Public alias used by /api/health to verify DB reachability. */
@@ -1168,7 +1199,7 @@ export const db = {
   /** Connect eagerly and verify connectivity. Used by /api/health. */
   async $connect() { await connect(); },
   /** True when a MongoDB connection is currently cached. */
-  isConnected(): boolean { return !!globalThis.__mongoCache; },
+  isConnected(): boolean { return !!globalThis.__mongoCache?.client; },
   /**
    * Interactive transaction. See the docstring on the private
    * `$transaction` function above for caveats. Exposed so API routes
