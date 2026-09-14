@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLogin, useRegister } from "@/lib/hooks";
 import { useRush } from "@/lib/store";
 import {
@@ -13,7 +13,7 @@ import {
   MapPin,
 } from "lucide-react";
 import { isFirebaseConfigured } from "@/lib/auth-providers/firebase-client";
-import { signInWithGoogle } from "@/lib/auth-providers/google";
+import { signInWithGoogle, handleRedirectResult } from "@/lib/auth-providers/google";
 import { toAppError } from "@/lib/errors";
 
 type Mode = "login" | "register";
@@ -38,6 +38,31 @@ export function AuthScreen() {
     loginMut.isPending ||
     registerMut.isPending ||
     googleLoading;
+
+  // On mount, check if we're returning from a Google redirect sign-in.
+  // If so, getRedirectResult() returns the credential, we POST the ID
+  // token to /api/auth/firebase, and navigate to home on success.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      if (!isFirebaseConfigured) return;
+      try {
+        const result = await handleRedirectResult();
+        if (cancelled || !result) return;
+        // Redirect sign-in succeeded — navigate to home.
+        pushToast({ title: "Welcome to Rush!" });
+        navigate("home");
+        window.location.href = "/";
+      } catch (err: any) {
+        if (!cancelled) {
+          setError(toAppError(err).message);
+          setGoogleLoading(false);
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleBack = () => {
     back();

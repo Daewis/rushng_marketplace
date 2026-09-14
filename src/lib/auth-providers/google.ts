@@ -1,20 +1,33 @@
 "use client";
 
 /**
- * Google Sign-In via Firebase Authentication — POPUP flow.
+ * Google Sign-In via Firebase Authentication — REDIRECT flow.
+ *
+ * Why redirect instead of popup:
+ *   The popup flow (`signInWithPopup`) has a known bug in Firebase
+ *   Auth v12 where the Google Identity Services (GIS) library loads
+ *   asynchronously and the popup opens before GIS is ready, causing
+ *   "INTERNAL ASSERTION FAILED: Pending promise was never set".
+ *   This affects Firefox, Safari ITP, mobile webviews, and popup
+ *   blockers.
+ *
+ *   The redirect flow (`signInWithRedirect`) navigates the entire
+ *   page to Google's auth page, then back to the app with the result.
+ *   No popup, no GIS timing issue. Works everywhere.
  *
  * Flow:
  *   1. User clicks "Continue with Google".
- *   2. Firebase opens Google's authentication page in a popup.
- *   3. User selects/signs into their Google account.
- *   4. The popup closes and Firebase returns the authenticated user.
- *   5. We obtain the Firebase ID token.
- *   6. We POST the ID token to /api/auth/firebase.
- *   7. The server creates the RUSH session cookie.
+ *   2. Browser navigates to accounts.google.com.
+ *   3. User picks account → Google redirects back to the app.
+ *   4. On mount, AuthScreen calls `handleRedirectResult()` which
+ *      checks `getRedirectResult()` for the completed sign-in.
+ *   5. If a user is returned, we get the ID token and POST it to
+ *      /api/auth/firebase to create the RUSH session cookie.
  */
 
 import {
-  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult,
   type UserCredential,
 } from "firebase/auth";
 
@@ -30,11 +43,11 @@ import {
 } from "./types";
 
 /**
- * Start Google sign-in using a popup.
+ * Start Google sign-in using a full-page redirect.
  *
- * The popup completes the Firebase authentication flow and returns
- * the authenticated user. We then obtain the Firebase ID token and
- * exchange it with the RUSH backend for the RUSH session cookie.
+ * This navigates AWAY from the app — the browser goes to Google,
+ * the user picks an account, then Google redirects back. The result
+ * is handled by `handleRedirectResult()` on the next page load.
  */
 export async function signInWithGoogle(): Promise<AuthResult> {
   if (!isFirebaseConfigured || !firebaseAuth || !firebaseGoogleProvider) {
@@ -44,17 +57,38 @@ export async function signInWithGoogle(): Promise<AuthResult> {
     );
   }
 
-  try {
-    const cred: UserCredential = await signInWithPopup(
-      firebaseAuth,
-      firebaseGoogleProvider,
-    );
+  // This navigates away from the page — the promise resolves after
+  // the redirect is initiated, NOT after the user signs in. The
+  // actual sign-in result is handled by handleRedirectResult() on
+  // the next page load.
+  await signInWithRedirect(firebaseAuth, firebaseGoogleProvider);
 
-    if (!cred.user) {
-      throw new AuthError(
-        "Google sign-in did not return a user.",
-        "GOOGLE_SIGN_IN_FAILED",
-      );
+  // This return never executes in practice — the page navigates
+  // away before we get here. But TypeScript needs a return value.
+  return { id: "", email: "", name: "" };
+}
+
+/**
+ * Check for a completed Google redirect sign-in.
+ *
+ * Call this on AuthScreen mount. If the user just came back from
+ * Google's auth page, `getRedirectResult()` returns the credential.
+ * We extract the ID token and POST it to /api/auth/firebase to
+ * create the RUSH session cookie.
+ *
+ * Returns null if there's no redirect result (normal page load,
+ * not returning from Google).
+ */
+export async function handleRedirectResult(): Promise<AuthResult | null> {
+  if (!isFirebaseConfigured || !firebaseAuth) {
+    return null;
+  }
+
+  try {
+    const cred: UserCredential | null = await getRedirectResult(firebaseAuth);
+
+    if (!cred || !cred.user) {
+      return null;
     }
 
     const idToken = await cred.user.getIdToken();
@@ -86,10 +120,10 @@ export async function signInWithGoogle(): Promise<AuthResult> {
       name: data.user.name,
     };
   } catch (error: any) {
-    if (error?.code === "auth/popup-closed-by-user") {
+    if (error?.code === "auth/redirect-cancelled-by-user") {
       throw new AuthError(
         "Google sign-in was cancelled.",
-        "GOOGLE_POPUP_CLOSED",
+        "GOOGLE_REDIRECT_CANCELLED",
       );
     }
 
