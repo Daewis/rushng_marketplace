@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useLogin, useRegister } from "@/lib/hooks";
 import { useRush } from "@/lib/store";
 import {
@@ -32,6 +33,7 @@ export function AuthScreen() {
 
   const loginMut = useLogin();
   const registerMut = useRegister();
+  const qc = useQueryClient();
   const { pushToast, back, navigate } = useRush();
 
   const loading =
@@ -50,9 +52,16 @@ export function AuthScreen() {
         const result = await handleRedirectResult();
         if (cancelled || !result) return;
         // Redirect sign-in succeeded — navigate to home.
+        // Clear the stale { user: null } cache (same as email/password
+        // login) instead of a hard `window.location.href` reload. A
+        // full reload right after the Google redirect races the PWA
+        // service worker's navigation caching for "/" and was
+        // surfacing as Workbox errors right after the redirect
+        // completed.
+        qc.removeQueries({ queryKey: ["me"] });
+        qc.invalidateQueries({ queryKey: ["me"] });
         pushToast({ title: "Welcome to Rush!" });
         navigate("home");
-        window.location.href = "/";
       } catch (err: any) {
         if (!cancelled) {
           setError(toAppError(err).message);
@@ -137,11 +146,11 @@ export function AuthScreen() {
       // After successful login/register, navigate to home + reload
       // the page so useMe() re-fetches with the new session cookie.
       // The navigate("home") sets the Zustand view to "home" before
-      // the reload, so the user lands on HomeScreen (not the landing
-      // page gate). The removeQueries in the login/register hook
-      // ensures the stale { user: null } cache is cleared.
+      // page gate, without a hard reload that races the PWA service
+      // worker's navigation caching for "/".
+      qc.removeQueries({ queryKey: ["me"] });
+      qc.invalidateQueries({ queryKey: ["me"] });
       navigate("home");
-      window.location.href = "/";
     } catch (err: any) {
       setError(toAppError(err).message);
     } finally {
