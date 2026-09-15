@@ -5,24 +5,28 @@ const withPWA = withPWAInit({
   dest: "public",
   disable: process.env.NODE_ENV === "development",
   register: true,
-  workboxOptions: {
-    disableDevLogs: true,
-    // Exclude Auth endpoints, Firebase, Paystack, and external media CDNs from SW interception
-    exclude: [
-      /^https:\/\/apis\.google\.com\/.*/,
-      /^https:\/\/.*\.googleapis\.com\/.*/,
-      /^https:\/\/accounts\.google\.com\/.*/,
-      /^https:\/\/.*\.firebaseio\.com\/.*/,
-      /^https:\/\/.*\.firebaseapp\.com\/.*/,
-      /^https:\/\/js\.paystack\.co\/.*/,
-      /^https:\/\/checkout\.paystack\.com\/.*/,
-      /^https:\/\/lh3\.googleusercontent\.com\/.*/,
-      /^https:\/\/ui-avatars\.com\/.*/,
-      /^https:\/\/images\.unsplash\.com\/.*/,
-      /\/__\/auth\/.*/,
-      /\/__\/firebase\/.*/,
-    ],
-  },
+workboxOptions: {
+  disableDevLogs: true,
+  exclude: [
+    // Bypass ALL internal Next.js API routes from SW interception
+    /^\/api\/.*/,
+    /^https:\/\/rush.*\.vercel\.app\/api\/.*/,
+
+    // External Auth, Firebase, Paystack, and CDN endpoints
+    /^https:\/\/apis\.google\.com\/.*/,
+    /^https:\/\/.*\.googleapis\.com\/.*/,
+    /^https:\/\/accounts\.google\.com\/.*/,
+    /^https:\/\/.*\.firebaseio\.com\/.*/,
+    /^https:\/\/.*\.firebaseapp\.com\/.*/,
+    /^https:\/\/js\.paystack\.co\/.*/,
+    /^https:\/\/checkout\.paystack\.com\/.*/,
+    /^https:\/\/lh3\.googleusercontent\.com\/.*/,
+    /^https:\/\/ui-avatars\.com\/.*/,
+    /^https:\/\/images\.unsplash\.com\/.*/,
+    /\/__\/auth\/.*/,
+    /\/__\/firebase\/.*/,
+  ],
+},
 });
 
 const nextConfig: NextConfig = {
