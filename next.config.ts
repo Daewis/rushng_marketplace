@@ -7,6 +7,7 @@ const withPWA = withPWAInit({
   register: true,
   workboxOptions: {
     disableDevLogs: true,
+    // Exclude Auth endpoints, Firebase, Paystack, and external media CDNs from SW interception
     exclude: [
       /^https:\/\/apis\.google\.com\/.*/,
       /^https:\/\/.*\.googleapis\.com\/.*/,
@@ -15,6 +16,9 @@ const withPWA = withPWAInit({
       /^https:\/\/.*\.firebaseapp\.com\/.*/,
       /^https:\/\/js\.paystack\.co\/.*/,
       /^https:\/\/checkout\.paystack\.com\/.*/,
+      /^https:\/\/lh3\.googleusercontent\.com\/.*/,
+      /^https:\/\/ui-avatars\.com\/.*/,
+      /^https:\/\/images\.unsplash\.com\/.*/,
       /\/__\/auth\/.*/,
       /\/__\/firebase\/.*/,
     ],
@@ -40,7 +44,9 @@ const nextConfig: NextConfig = {
           "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
           "font-src 'self' https://fonts.gstatic.com",
           "img-src 'self' data: https: blob:",
-          "connect-src 'self' https://*.googleapis.com https://apis.google.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://accounts.google.com https://www.google.com wss://*.firebaseio.com https://api.paystack.co",   "frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://js.paystack.co https://checkout.paystack.com",
+          // Added: lh3.googleusercontent.com, ui-avatars.com, images.unsplash.com
+          "connect-src 'self' https://*.googleapis.com https://apis.google.com https://identitytoolkit.googleapis.com https://securetoken.googleapis.com https://accounts.google.com https://www.google.com https://lh3.googleusercontent.com https://ui-avatars.com https://images.unsplash.com wss://*.firebaseio.com https://api.paystack.co",
+          "frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://js.paystack.co https://checkout.paystack.com",
           "frame-ancestors 'self'",
           "form-action 'self'",
           "base-uri 'self'",
