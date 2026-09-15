@@ -1,6 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { requireUser, parseCapabilities, serializeCapabilities } from "@/lib/auth";
+import {
+  requireUser,
+  getOptionalUser,
+  parseCapabilities,
+  serializeCapabilities,
+} from "@/lib/auth";
 import { safeJsonParse } from "@/lib/safe-json";
 
 export async function GET(
@@ -21,12 +26,22 @@ export async function GET(
     },
   });
 
-  // Visibility gate — admin-only "ALL" filter on the public list
-  // endpoint doesn't apply here, but a vendor marked PRIVATE (e.g.
-  // suspended by an admin) should not be reachable by slug from a
-  // public caller. LINK_ONLY is reachable if you have the link, which
-  // is the existing semantics, so we leave that alone.
-  if (!vendor || vendor.visibility === "PRIVATE") {
+  if (!vendor) {
+    return NextResponse.json({ error: "Store not found" }, { status: 404 });
+  }
+
+  // Check if caller is authenticated and owns this store
+  let currentUser = null;
+  try {
+    currentUser = await getOptionalUser();
+  } catch {
+    // Guest or unauthenticated caller
+  }
+
+  const isOwner = currentUser?.id === vendor.userId;
+
+  // Visibility gate: Block only if PRIVATE and caller is not the owner
+  if (vendor.visibility === "PRIVATE" && !isOwner) {
     return NextResponse.json({ error: "Store not found" }, { status: 404 });
   }
 
@@ -122,10 +137,23 @@ export async function PATCH(
     // computed fields like rating, reviewCount, followers, verified.
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     const fields = [
-      "businessName", "description", "category", "logo", "coverImage",
-      "phone", "whatsapp", "email", "location",
-      "instagram", "tiktok", "facebook", "themeColor",
-      "visibility", "deliveryEnabled", "deliveryFee", "deliveryTimeMin",
+      "businessName",
+      "description",
+      "category",
+      "logo",
+      "coverImage",
+      "phone",
+      "whatsapp",
+      "email",
+      "location",
+      "instagram",
+      "tiktok",
+      "facebook",
+      "themeColor",
+      "visibility",
+      "deliveryEnabled",
+      "deliveryFee",
+      "deliveryTimeMin",
     ] as const;
 
     for (const f of fields) {
@@ -136,7 +164,13 @@ export async function PATCH(
       // backward compat). Also accept https:// URLs. Rejects
       // javascript:, data:, file:, etc.
       if (f === "logo" || f === "coverImage") {
-        if (typeof val === "string" && (val.startsWith("/api/uploads/") || val.startsWith("/uploads/") || val.startsWith("https://") || val === "")) {
+        if (
+          typeof val === "string" &&
+          (val.startsWith("/api/uploads/") ||
+            val.startsWith("/uploads/") ||
+            val.startsWith("https://") ||
+            val === "")
+        ) {
           updates[f] = val;
         } else {
           return NextResponse.json(
@@ -161,7 +195,10 @@ export async function PATCH(
         );
       }
       // Numbers must be non-negative.
-      if ((f === "deliveryFee" || f === "deliveryTimeMin") && (typeof val !== "number" || val < 0 || !Number.isFinite(val))) {
+      if (
+        (f === "deliveryFee" || f === "deliveryTimeMin") &&
+        (typeof val !== "number" || val < 0 || !Number.isFinite(val))
+      ) {
         return NextResponse.json(
           { error: `${f} must be a non-negative number` },
           { status: 400 },
