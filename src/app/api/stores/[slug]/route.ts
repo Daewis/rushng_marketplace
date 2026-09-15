@@ -2,7 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import {
   requireUser,
-  getOptionalUser,
   parseCapabilities,
   serializeCapabilities,
 } from "@/lib/auth";
@@ -16,9 +15,7 @@ export async function GET(
   const vendor = await db.vendorProfile.findUnique({
     where: { slug },
     include: {
-      // Cap product list at 100. Previously pulled every product for
-      // the vendor with no limit, which on a large catalog would
-      // balloon the response and tank the storefront page.
+      // Cap product list at 100 to keep responses performant
       products: {
         orderBy: { createdAt: "desc" },
         take: 100,
@@ -31,11 +28,12 @@ export async function GET(
   }
 
   // Check if caller is authenticated and owns this store
-  let currentUser = null;
+  let currentUser: { id: string } | null = null;
   try {
-    currentUser = await getOptionalUser();
+    currentUser = await requireUser();
   } catch {
     // Guest or unauthenticated caller
+    currentUser = null;
   }
 
   const isOwner = currentUser?.id === vendor.userId;
@@ -99,18 +97,6 @@ export async function GET(
 
 /**
  * PATCH /api/stores/:slug — vendor-only edit of their own store.
- *
- * Only the owner of the store (the user whose userId matches the
- * vendorProfile's userId) can edit. All fields are optional; only
- * what's sent is updated.
- *
- * Accepts: businessName, description, category, logo (URL from
- * /api/uploads), coverImage, phone, whatsapp, email, location,
- * instagram, tiktok, facebook, themeColor, visibility, deliveryEnabled,
- * deliveryFee, deliveryTimeMin.
- *
- * Slug is NOT editable here — changing the public URL of a store
- * would break every existing link, so it's locked at onboarding.
  */
 export async function PATCH(
   req: NextRequest,
@@ -132,9 +118,6 @@ export async function PATCH(
       );
     }
 
-    // Allow-list of fields the vendor can edit. Anything else in the
-    // body is ignored — we never let the body directly override
-    // computed fields like rating, reviewCount, followers, verified.
     const updates: Record<string, unknown> = { updatedAt: new Date() };
     const fields = [
       "businessName",
@@ -159,10 +142,6 @@ export async function PATCH(
     for (const f of fields) {
       if (!(f in body)) continue;
       const val = body[f];
-      // For image URLs, accept both /api/uploads/ (GridFS — current
-      // pattern) and /uploads/ (legacy filesystem pattern, kept for
-      // backward compat). Also accept https:// URLs. Rejects
-      // javascript:, data:, file:, etc.
       if (f === "logo" || f === "coverImage") {
         if (
           typeof val === "string" &&
@@ -180,21 +159,18 @@ export async function PATCH(
         }
         continue;
       }
-      // Enum validation for visibility.
       if (f === "visibility" && !["PUBLIC", "LINK_ONLY", "PRIVATE"].includes(val)) {
         return NextResponse.json(
           { error: "Visibility must be PUBLIC, LINK_ONLY, or PRIVATE" },
           { status: 400 },
         );
       }
-      // Booleans must be actual booleans.
       if (f === "deliveryEnabled" && typeof val !== "boolean") {
         return NextResponse.json(
           { error: "deliveryEnabled must be true or false" },
           { status: 400 },
         );
       }
-      // Numbers must be non-negative.
       if (
         (f === "deliveryFee" || f === "deliveryTimeMin") &&
         (typeof val !== "number" || val < 0 || !Number.isFinite(val))
@@ -246,25 +222,7 @@ export async function PATCH(
 }
 
 /**
- * DELETE /api/stores/:slug — tear down the calling user's vendor
- * store. The user keeps their account and other capabilities, but
- * their store + all products in it are removed and the VENDOR
- * capability is stripped from their `capabilities` array.
- *
- * Body MUST be `{ confirm: true }` so the client has to opt in
- * deliberately (the UI additionally prompts the user to type
- * "DELETE" before calling this).
- *
- * Cascade:
- *   1. Verify vendor exists and `vendor.userId === user.id`.
- *   2. Delete all products under this vendor.
- *   3. Delete the vendorProfile row itself.
- *   4. Mutate the user's `capabilities` JSON to drop the VENDOR
- *      entry, and persist.
- *
- * Orders placed against this vendor are intentionally LEFT in place —
- * they're historical records for the customers (and the admin
- * dashboard) and shouldn't vanish because the vendor shut up shop.
+ * DELETE /api/stores/:slug — tear down the calling user's vendor store.
  */
 export async function DELETE(
   req: NextRequest,
@@ -274,7 +232,6 @@ export async function DELETE(
     const user = await requireUser();
     const { slug } = await params;
 
-    // Soft-confirm guard — same pattern as /api/auth/me DELETE.
     let body: any = {};
     try {
       body = await req.json();
@@ -299,15 +256,9 @@ export async function DELETE(
       );
     }
 
-    // 1. Delete all products under this vendor.
     await db.product.deleteMany({ where: { vendorId: vendor.id } });
-
-    // 2. Delete the vendorProfile itself.
     await db.vendorProfile.delete({ where: { id: vendor.id } });
 
-    // 3. Strip the VENDOR capability from the user's capabilities
-    //    JSON column. parseCapabilities returns the array shape; we
-    //    filter out VENDOR and re-serialize.
     const caps = parseCapabilities(user.capabilities);
     const remainingCaps = caps.filter((c: any) => c.type !== "VENDOR");
     await db.user.update({
