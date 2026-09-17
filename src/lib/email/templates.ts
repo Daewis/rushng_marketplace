@@ -505,7 +505,7 @@ ${
 export function emailVerificationTemplate(params: {
   name: string;
   verifyUrl: string;
-}): EmailTemplate {
+}): { subject: string; html: string } {
   const subject = "Verify your Rush account";
   const html = `
     <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; color: #111;">
@@ -529,6 +529,7 @@ export function emailVerificationTemplate(params: {
 
   return { subject, html };
 }
+
 
 /**
  * Ride notification template.
