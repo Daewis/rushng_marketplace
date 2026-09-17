@@ -1,0 +1,27 @@
+import { sendEmail } from "./send";
+import { emailVerificationTemplate } from "./templates";
+
+export async function sendVerificationEmail(params: {
+  userId: string;
+  email: string;
+  name: string;
+  token: string;
+}) {
+  const appUrl =
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+
+  const verifyUrl = `${appUrl}/api/auth/verify?token=${params.token}`;
+  const template = emailVerificationTemplate({
+    name: params.name,
+    verifyUrl,
+  });
+
+  return sendEmail({
+    userId: params.userId,
+    to: params.email,
+    category: "WELCOME", // Or add "VERIFICATION" to EmailCategory in src/lib/email/types.ts
+    subject: template.subject,
+    html: template.html,
+  });
+}
