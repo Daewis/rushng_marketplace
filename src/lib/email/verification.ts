@@ -19,8 +19,11 @@ export async function sendVerificationEmail(params: {
 
   return sendEmail({
     userId: params.userId,
-    to: params.email,
-    category: "WELCOME", // Or add "VERIFICATION" to EmailCategory in src/lib/email/types.ts
+    to: {
+      email: params.email,
+      name: params.name,
+    },
+    category: "WELCOME",
     subject: template.subject,
     html: template.html,
   });
