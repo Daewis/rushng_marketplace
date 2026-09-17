@@ -25,6 +25,6 @@ export async function sendVerificationEmail(params: {
     category: "WELCOME",
     subject: template.subject,
     html: template.html,
-    idempotencyKey: `verify-${params.userId}-${params.token.slice(-8)}`,
+    //idempotencyKey: `verify-${params.userId}-${params.token.slice(-8)}`,
   });
 }
