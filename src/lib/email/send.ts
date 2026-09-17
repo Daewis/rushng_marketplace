@@ -253,19 +253,12 @@ export async function sendEmail(
             ? { text: options.text }
             : {}),
 
-          ...(emailConfig.replyTo
-            ? {
-                replyTo:
-                  emailConfig.replyTo,
-              }
-            : {}),
+          // Fallback directly to your personal email if env variable is missing
+          replyTo: emailConfig.replyTo || "lasuedsms@gmail.com",
         },
         {
           /**
            * Resend-level idempotency.
-           *
-           * This is a second layer of protection against
-           * duplicate sends.
            */
           idempotencyKey,
         },
