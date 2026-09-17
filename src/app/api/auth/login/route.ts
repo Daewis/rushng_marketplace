@@ -19,8 +19,10 @@ export async function POST(req: NextRequest) {
       );
     }
 
+    const normalizedEmail = email.toLowerCase().trim();
+
     const user = await db.user.findUnique({
-      where: { email },
+      where: { email: normalizedEmail },
       include: {
         vendorProfile: true,
         providerProfile: true,
@@ -29,17 +31,17 @@ export async function POST(req: NextRequest) {
       },
     });
 
+    // 401 Unauthorized prevents account enumeration probes
     if (!user) {
       return NextResponse.json(
-        { error: "No account found with this email. Please register." },
-        { status: 404 },
+        { error: "Invalid email or password. Please check your credentials or register." },
+        { status: 401 },
       );
     }
 
     // Accounts created via Firebase (Google Sign-In) have passwordHash = null.
     // Refuse the legacy email/password flow for them — they must sign in
-    // with Google again. This avoids silently creating a parallel
-    // password-based session that bypasses Firebase's revocation.
+    // with Google again.
     if (!user.passwordHash) {
       return NextResponse.json(
         {
@@ -53,7 +55,7 @@ export async function POST(req: NextRequest) {
     const ok = await verifyPassword(password, user.passwordHash);
     if (!ok) {
       return NextResponse.json(
-        { error: "Incorrect password. Please try again." },
+        { error: "Invalid email or password. Please check your credentials or register." },
         { status: 401 },
       );
     }
@@ -68,6 +70,7 @@ export async function POST(req: NextRequest) {
       phone: user.phone,
       avatar: user.avatar,
       location: user.location,
+      emailVerified: user.emailVerified,
       capabilities: JSON.parse(user.capabilities),
       activeWorkspace: user.activeWorkspace,
       vendorProfile: user.vendorProfile,
