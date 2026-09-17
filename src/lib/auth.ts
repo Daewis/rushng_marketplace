@@ -1,6 +1,7 @@
 import bcrypt from "bcryptjs";
 import { SignJWT, jwtVerify } from "jose";
 import { cookies } from "next/headers";
+import crypto from "crypto";
 import { db } from "./db";
 
 /**
@@ -29,6 +30,8 @@ function getJwtSecret(): Uint8Array {
 // (otherwise `next build` would crash type-checking).
 const COOKIE_NAME = "rush_session";
 const SESSION_DURATION = 60 * 60 * 24 * 30; // 30 days
+
+const AUTH_SECRET = process.env.AUTH_SECRET || process.env.JWT_SECRET || "rush-fallback-secret-change-me";
 
 export interface SessionUser {
   id: string;
@@ -175,4 +178,48 @@ export function addCapability(user: any, type: string, status = "ACTIVE", profil
   if (exists) return caps;
   caps.push({ type, status, ...(profileId ? { profileId } : {}) });
   return caps;
+}
+
+/**
+ * Generate a signed, time-limited token for email verification links.
+ */
+export function createVerificationToken(userId: string, email: string): string {
+  const expiresAt = Date.now() + 24 * 60 * 60 * 1000; // 24 hours
+  const payload = `${userId}:${email}:${expiresAt}`;
+  const signature = crypto
+    .createHmac("sha256", AUTH_SECRET)
+    .update(payload)
+    .digest("hex");
+
+  return Buffer.from(`${payload}:${signature}`).toString("base64url");
+}
+
+/**
+ * Verify HMAC signature and expiration on an email verification token.
+ */
+export function verifyVerificationToken(token: string): { userId: string; email: string } | null {
+  try {
+    const raw = Buffer.from(token, "base64url").toString("utf-8");
+    const [userId, email, expiresAtStr, signature] = raw.split(":");
+    if (!userId || !email || !expiresAtStr || !signature) return null;
+
+    const expiresAt = Number(expiresAtStr);
+    if (Date.now() > expiresAt) return null; // Expired
+
+    const payload = `${userId}:${email}:${expiresAtStr}`;
+    const expectedSig = crypto
+      .createHmac("sha256", AUTH_SECRET)
+      .update(payload)
+      .digest("hex");
+
+    const sigBuf = Buffer.from(signature);
+    const expBuf = Buffer.from(expectedSig);
+
+    if (sigBuf.length === expBuf.length && crypto.timingSafeEqual(sigBuf, expBuf)) {
+      return { userId, email };
+    }
+    return null;
+  } catch {
+    return null;
+  }
 }
