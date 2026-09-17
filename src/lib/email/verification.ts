@@ -22,9 +22,7 @@ export async function sendVerificationEmail(params: {
       email: params.email,
       name: params.name,
     },
-    category: "WELCOME",
     subject: template.subject,
     html: template.html,
-    //idempotencyKey: `verify-${params.userId}-${params.token.slice(-8)}`,
   });
 }
