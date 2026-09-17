@@ -1,9 +1,10 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { sendWelcomeEmail } from "@/lib/email";
+import { sendWelcomeEmail, sendVerificationEmail } from "@/lib/email";
 import {
   hashPassword,
   createToken,
+  createVerificationToken,
   setSessionCookie,
   addCapability,
   serializeCapabilities,
@@ -47,6 +48,7 @@ export async function POST(req: NextRequest) {
         phone: phone || null,
         location: location || null,
         passwordHash,
+        emailVerified: false,
         avatar:
           body.avatar ||
           `https://ui-avatars.com/api/?name=${encodeURIComponent(
@@ -72,15 +74,22 @@ export async function POST(req: NextRequest) {
     });
 
     /*
-     * Send the welcome email exactly once.
-     *
-     * sendWelcomeEmail() uses the user's ID as the
-     * idempotency key, so calling this again for the
-     * same account will not create another welcome email.
-     *
-     * If email delivery fails, account creation should
-     * still succeed.
+     * Send verification and welcome emails.
+     * If email delivery fails, account creation should still succeed.
      */
+    const verificationToken = createVerificationToken(user.id, user.email);
+
+    try {
+      await sendVerificationEmail({
+        userId: user.id,
+        email: user.email,
+        name: user.name,
+        token: verificationToken,
+      });
+    } catch (emailErr) {
+      console.error("[register POST] Verification email delivery failed:", emailErr);
+    }
+
     try {
       await sendWelcomeEmail({
         userId: user.id,
@@ -104,6 +113,7 @@ export async function POST(req: NextRequest) {
       phone: user.phone,
       avatar: user.avatar,
       location: user.location,
+      emailVerified: user.emailVerified,
       capabilities: JSON.parse(user.capabilities),
       activeWorkspace: user.activeWorkspace,
       wallet: user.wallet,
