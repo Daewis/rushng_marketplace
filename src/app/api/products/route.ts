@@ -104,6 +104,14 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const user = await requireUser();
+
+    if (!user.emailVerified) {
+      return NextResponse.json(
+        { error: "Please verify your email address before listing products." },
+        { status: 403 },
+      );
+    }
+
     const vendorProfile = (user as any).vendorProfile;
     if (!vendorProfile) {
       return NextResponse.json(
