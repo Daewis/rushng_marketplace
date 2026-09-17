@@ -29,6 +29,8 @@ export {
   paymentEmailTemplate,
 } from "./templates";
 
+export * from "./verification";
+
 export type {
   EmailType,
   EmailDeliveryStatus,
