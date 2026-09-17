@@ -72,6 +72,14 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   try {
     const user = await requireUser();
+
+    if (!user.emailVerified) {
+      return NextResponse.json(
+        { error: "Please verify your email address before booking services." },
+        { status: 403 },
+      );
+    }
+
     const body = await req.json();
     const { providerId, serviceId, title, description, category, budget, location } = body;
 
