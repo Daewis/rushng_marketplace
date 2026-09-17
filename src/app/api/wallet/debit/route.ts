@@ -28,6 +28,14 @@ import { randomBytes } from "node:crypto";
 export async function POST(req: NextRequest) {
   try {
     const user = await requireUser();
+
+    if (!user.emailVerified) {
+      return NextResponse.json(
+        { error: "Please verify your email address before initiating wallet withdrawals or transfers." },
+        { status: 403 },
+      );
+    }
+
     const body = await req.json();
     const { orderId } = body;
 
@@ -146,7 +154,7 @@ export async function POST(req: NextRequest) {
       amount,
     });
   } catch (err: any) {
-    if (err instanceof Response) return err;
+    if (err instanceof Response) throw err;
     console.error("[wallet/debit POST] error", err);
     return NextResponse.json(
       { error: err.message || "Failed to debit wallet" },
