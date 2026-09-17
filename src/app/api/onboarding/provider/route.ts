@@ -14,6 +14,14 @@ function slugify(s: string): string {
 export async function POST(req: NextRequest) {
   try {
     const user = await requireUser();
+
+    if (!user.emailVerified) {
+      return NextResponse.json(
+        { error: "Please verify your email address before registering as a service provider." },
+        { status: 403 },
+      );
+    }
+
     const body = await req.json();
     const { businessName, tagline, category, description, location, startingPrice, services = [] } = body;
 
