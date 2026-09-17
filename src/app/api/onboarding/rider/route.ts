@@ -5,6 +5,14 @@ import { requireUser, addCapability, serializeCapabilities } from "@/lib/auth";
 export async function POST(req: NextRequest) {
   try {
     const user = await requireUser();
+
+    if (!user.emailVerified) {
+      return NextResponse.json(
+        { error: "Please verify your email address before registering as a rider." },
+        { status: 403 },
+      );
+    }
+
     const body = await req.json();
     const {
       phone,
