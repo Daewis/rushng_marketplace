@@ -22,7 +22,7 @@ export const emailConfig = {
   appUrl:
     process.env.NEXT_PUBLIC_APP_URL ||
     process.env.APP_URL ||
-    "https://rushng-marketplace.vercel.app",
+    "https://rush-marketplace-eight.vercel.app",
 
   enabled:
     Boolean(process.env.RESEND_API_KEY) &&
