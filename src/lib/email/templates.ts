@@ -501,6 +501,35 @@ ${
   };
 }
 
+// Email verification
+export function emailVerificationTemplate(params: {
+  name: string;
+  verifyUrl: string;
+}): EmailTemplate {
+  const subject = "Verify your Rush account";
+  const html = `
+    <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 560px; margin: 0 auto; padding: 32px 24px; color: #111;">
+      <h2 style="font-size: 22px; font-weight: 800; margin-bottom: 16px;">Verify your email address</h2>
+      <p style="font-size: 15px; line-height: 1.6; color: #444;">Hi ${params.name},</p>
+      <p style="font-size: 15px; line-height: 1.6; color: #444;">
+        Welcome to Rush! Please verify your email address to complete your account setup and activate full access to the marketplace.
+      </p>
+      <div style="margin: 28px 0;">
+        <a href="${params.verifyUrl}" style="background-color: #FF6B1A; color: #ffffff; padding: 12px 24px; border-radius: 8px; font-weight: 700; text-decoration: none; display: inline-block;">
+          Verify Email
+        </a>
+      </div>
+      <p style="font-size: 13px; line-height: 1.5; color: #888;">
+        Or paste this link into your browser:<br/>
+        <a href="${params.verifyUrl}" style="color: #FF6B1A;">${params.verifyUrl}</a>
+      </p>
+      <p style="font-size: 12px; color: #aaa; margin-top: 32px;">This link will expire in 24 hours. If you did not create an account on Rush, you can ignore this email.</p>
+    </div>
+  `;
+
+  return { subject, html };
+}
+
 /**
  * Ride notification template.
  */
