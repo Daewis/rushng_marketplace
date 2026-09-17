@@ -14,8 +14,24 @@ function slugify(s: string): string {
 export async function POST(req: NextRequest) {
   try {
     const user = await requireUser();
+
+    if (!user.emailVerified) {
+      return NextResponse.json(
+        { error: "Please verify your email address before creating a store." },
+        { status: 403 },
+      );
+    }
+
     const body = await req.json();
-    const { businessName, category, description, location, phone, whatsapp, visibility = "PUBLIC" } = body;
+    const {
+      businessName,
+      category,
+      description,
+      location,
+      phone,
+      whatsapp,
+      visibility = "PUBLIC",
+    } = body;
 
     if (!businessName || !category || !location || !phone) {
       return NextResponse.json(
@@ -46,8 +62,14 @@ export async function POST(req: NextRequest) {
         slug,
         description: description || "",
         category,
-        logo: body.logo || `https://ui-avatars.com/api/?name=${encodeURIComponent(businessName)}&background=FF6B1A&color=fff`,
-        coverImage: body.coverImage || "https://images.unsplash.com/photo-1556745753-b290469f97e1?auto=format&fit=crop&w=1600&q=80",
+        logo:
+          body.logo ||
+          `https://ui-avatars.com/api/?name=${encodeURIComponent(
+            businessName,
+          )}&background=FF6B1A&color=fff`,
+        coverImage:
+          body.coverImage ||
+          "https://images.unsplash.com/photo-1556745753-b290469f97e1?auto=format&fit=crop&w=1600&q=80",
         phone,
         whatsapp: whatsapp || null,
         location,
