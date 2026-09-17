@@ -18,7 +18,6 @@ export async function sendVerificationEmail(params: {
   });
 
   return sendEmail({
-    userId: params.userId,
     to: {
       email: params.email,
       name: params.name,
@@ -26,5 +25,6 @@ export async function sendVerificationEmail(params: {
     category: "WELCOME",
     subject: template.subject,
     html: template.html,
+    idempotencyKey: `verify-${params.userId}-${params.token.slice(-8)}`,
   });
 }
